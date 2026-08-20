@@ -330,6 +330,65 @@ int build_B8(std::vector<Node>& ns,const Prims& ps,int d){
     return idx;
 }
 
+// ─── Direct Grid Split ────────────────────────────────────────────────────────
+// Global best 1D split per axis, then assign by centroid into cells.
+// Unlike A4/A8 the secondary splits are NOT adaptive per-group.
+
+static float split_thresh(const Split& sp, int ax){
+    int s=sp.s;
+    return (sp.sorted[s].box.centroid(ax)+sp.sorted[s+1].box.centroid(ax))*0.5f;
+}
+
+// Grid4: globally best 2 axes → 2×2 = up to 4 children
+int build_grid4(std::vector<Node>& ns,const Prims& ps,int d){
+    int idx=new_node(ns,ps,d); int n=(int)ps.size();
+    if(n<=MAX_LEAF){make_leaf(ns,idx,ps);return idx;}
+    Split sr[3]; float costs[3]={1e30f,1e30f,1e30f};
+    for(int ax=0;ax<3;ax++){sr[ax]=best_1d(ps,ax);if(sr[ax].s>=0)costs[ax]=sr[ax].cost;}
+    int ord[3]={0,1,2};
+    std::sort(ord,ord+3,[&](int a,int b){return costs[a]<costs[b];});
+    int a0=ord[0],a1=ord[1];
+    if(sr[a0].s<0){make_leaf(ns,idx,ps);return idx;}
+    float t0=split_thresh(sr[a0],a0);
+    bool has1=(sr[a1].s>=0); float t1=has1?split_thresh(sr[a1],a1):0.f;
+    Prims groups[4];
+    for(auto& p:ps){
+        int i=(p.box.centroid(a0)>=t0)?1:0;
+        int j=(has1&&p.box.centroid(a1)>=t1)?2:0;
+        groups[i+j].push_back(p);
+    }
+    std::vector<Prims> valid;
+    for(auto& g:groups) if(!g.empty()) valid.push_back(std::move(g));
+    if(valid.size()<=1){make_leaf(ns,idx,ps);return idx;}
+    for(auto& g:valid) ns[idx].children.push_back(build_grid4(ns,g,d+1));
+    return idx;
+}
+
+// Grid8: globally best 3 axes → 2×2×2 = up to 8 children
+int build_grid8(std::vector<Node>& ns,const Prims& ps,int d){
+    int idx=new_node(ns,ps,d); int n=(int)ps.size();
+    if(n<=MAX_LEAF){make_leaf(ns,idx,ps);return idx;}
+    Split sr[3]; bool vax[3]={}; float thresh[3]={};
+    for(int ax=0;ax<3;ax++){
+        sr[ax]=best_1d(ps,ax); vax[ax]=(sr[ax].s>=0);
+        if(vax[ax]) thresh[ax]=split_thresh(sr[ax],ax);
+    }
+    if(!vax[0]&&!vax[1]&&!vax[2]){make_leaf(ns,idx,ps);return idx;}
+    Prims groups[8];
+    for(auto& p:ps){
+        int key=0;
+        if(vax[0]&&p.box.centroid(0)>=thresh[0]) key|=1;
+        if(vax[1]&&p.box.centroid(1)>=thresh[1]) key|=2;
+        if(vax[2]&&p.box.centroid(2)>=thresh[2]) key|=4;
+        groups[key].push_back(p);
+    }
+    std::vector<Prims> valid;
+    for(auto& g:groups) if(!g.empty()) valid.push_back(std::move(g));
+    if(valid.size()<=1){make_leaf(ns,idx,ps);return idx;}
+    for(auto& g:valid) ns[idx].children.push_back(build_grid8(ns,g,d+1));
+    return idx;
+}
+
 // ─── Hybrid helpers (3-axis version) ─────────────────────────────────────────
 static bool binned_split_2way(const Prims& ps, float pa, int n_bins, Prims& lp, Prims& rp){
     int n=(int)ps.size();
@@ -545,6 +604,8 @@ int main(int argc, char* argv[]){
         {"A8 Independent",      [](auto& ns,auto& ps,int d){return build_A8              (ns,ps,d);}},
         {"B4 Hierarchical",     [](auto& ns,auto& ps,int d){return build_B4              (ns,ps,d);}},
         {"B8 Hierarchical",     [](auto& ns,auto& ps,int d){return build_B8              (ns,ps,d);}},
+        {"Grid4 (best 2-axis)", [](auto& ns,auto& ps,int d){return build_grid4            (ns,ps,d);}},
+        {"Grid8 (best 3-axis)", [](auto& ns,auto& ps,int d){return build_grid8            (ns,ps,d);}},
         {"Binned+A4 (T=32)",    [](auto& ns,auto& ps,int d){return build_hybrid_binned_A4 (ns,ps,d);}},
         {"Binned4+A4 (T=32)",   [](auto& ns,auto& ps,int d){return build_hybrid_binned4_A4(ns,ps,d);}},
         {"Binned4+A8 (T=32)",   [](auto& ns,auto& ps,int d){return build_hybrid_binned4_A8(ns,ps,d);}},

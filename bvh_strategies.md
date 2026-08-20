@@ -373,6 +373,18 @@ Median > 2way SAH ≈ Binned SAH > Binned+SAH ≈ Binned+SAH+Coll ≈ Binned Col
 - 4 次贪心 best_any：在 B4 的 4 个中间组再各做一刀
 - 分叉数：2 ~ 8
 
+**Grid4（全局双轴网格）**
+
+- 对全体图元分别做 3 次 1D SAH Sweep，选代价最低的 2 个轴
+- 用这 2 个**全局**分割阈值将空间划成 2×2 网格，直接把图元按质心分配进 4 个格子
+- 与 A4 的核心区别：次轴分割位置对 L/R 两侧使用相同阈值（不自适应）
+- 分叉数：2 ~ 4
+
+**Grid8（全局三轴网格）**
+
+- 同上，对全体图元取 X/Y/Z 三轴各自最优分割阈值，直接分配进 2×2×2 = 8 个格子
+- 分叉数：2 ~ 8
+
 #### 混合策略（3D）
 
 | 策略 | 说明 |
@@ -398,6 +410,8 @@ Median > 2way SAH ≈ Binned SAH > Binned+SAH ≈ Binned+SAH+Coll ≈ Binned Col
 | **A8 Independent** | 194.7 | **54.07** | 62028 | 52775 | 6 |
 | B4 Hierarchical | 242.8 | 66.83 | 75079 | 56285 | 9 |
 | **B8 Hierarchical** | 239.6 | **52.88** | 59900 | 51020 | 6 |
+| Grid4 (best 2-axis) | 165.1 | 75.92 | 65856 | 46603 | 10 |
+| Grid8 (best 3-axis) | 120.2 | 55.49 | 64637 | 52997 | 7 |
 | Binned+A4 (T=32) | 81.8 | 101.97 | 77925 | 56228 | 15 |
 | Binned4+A4 (T=32) | 82.8 | 68.78 | 75202 | 56228 | 9 |
 | **Binned4+A8 (T=32)** | **80.5** | **66.45** | 61426 | 51561 | 9 |
@@ -415,6 +429,8 @@ Median > 2way SAH ≈ Binned SAH > Binned+SAH ≈ Binned+SAH+Coll ≈ Binned Col
 | **A8 Independent** | 191.9 | **49.15** | 62303 | 53024 | 6 |
 | B4 Hierarchical | 237.6 | 61.79 | 74883 | 56144 | 9 |
 | **B8 Hierarchical** | 236.5 | **48.05** | 60169 | 51263 | 6 |
+| Grid4 (best 2-axis) | 166.7 | 69.29 | 66269 | 47016 | 10 |
+| Grid8 (best 3-axis) | 119.8 | 50.81 | 64260 | 52737 | 7 |
 | Binned+A4 (T=32) | 78.7 | 96.13 | 78076 | 56337 | 15 |
 | Binned4+A4 (T=32) | 80.5 | 63.64 | 75352 | 56337 | 9 |
 | **Binned4+A8 (T=32)** | **77.5** | **61.49** | 60882 | 51145 | 9 |
@@ -436,6 +452,8 @@ Median > 2way SAH ≈ Binned SAH > Binned+SAH ≈ Binned+SAH+Coll ≈ Binned Col
 | A8 Independent | 272.1 | 17.67 |
 | B4 Hierarchical | 326.5 | 21.55 |
 | **B8 Hierarchical** | 354.9 | **16.49** |
+| Grid4 (best 2-axis) | 219.4 | 24.63 |
+| Grid8 (best 3-axis) | 160.5 | 19.22 |
 | Binned+A4 (T=32) | 120.0 | 32.88 |
 | Binned4+A4 (T=32) | 128.3 | 22.18 |
 | **Binned4+A8 (T=32)** | **121.6** | **21.60** |
@@ -453,6 +471,8 @@ Median > 2way SAH ≈ Binned SAH > Binned+SAH ≈ Binned+SAH+Coll ≈ Binned Col
 | A8 Independent | 1934.6 | 23.94 |
 | B4 Hierarchical | 2352.9 | 28.75 |
 | **B8 Hierarchical** | 2361.8 | **21.81** |
+| Grid4 (best 2-axis) | 1476.6 | 32.38 |
+| Grid8 (best 3-axis) | 1100.1 | 26.63 |
 | Binned+A4 (T=32) | 764.7 | 45.31 |
 | Binned4+A4 (T=32) | 814.1 | 29.86 |
 | **Binned4+A8 (T=32)** | **789.2** | **28.64** |
@@ -468,3 +488,10 @@ Median > 2way SAH ≈ Binned SAH > Binned+SAH ≈ Binned+SAH+Coll ≈ Binned Col
 3. **2D 结论在 3D 上成立**：Binned SAH ≈ Sweep SAH 质量，速度快 3×；Collapse k=2 带来 SAH 大幅下降（Dragon：~40%）；穷举方法（C/D）在 3D 中因 O(N³) 代价不可行，未实现。
 
 4. **真实网格 vs 随机合成**：排名顺序完全一致，说明策略排名对网格类型鲁棒。
+
+5. **Grid4 / Grid8 vs A4 / A8（全局网格 vs 自适应分割）**：
+   - Grid 使用全局最优 1D 阈值，次轴不因子组不同而调整；A4/A8 对每个子组独立选次轴。
+   - Dragon 上 Grid4 SAH = 32.4，A4 = 29.1，差距约 **11%**；Grid8 = 26.6，A8 = 23.9，同样约 **11%**。
+   - Grid 比同叉数的 A/B 快约 30%（Dragon：Grid4 1477 ms vs A4 2216 ms），因为无需对子组重新扫描轴。
+   - Grid8 比 Grid4 更快（1100 ms vs 1477 ms）：三轴分割使每格图元更少，递归深度更浅。
+   - 结论：全局网格分割是自适应分割的快速近似，固定损失约 11% SAH，适合对构建速度要求严格而对质量要求宽松的场景。
