@@ -450,6 +450,58 @@ int build_binned_collapse(std::vector<Node>& ns,const Prims& ps,int d){
     return collapse_k2(tmp,ns,0,d);
 }
 
+// ─── OBJ loader ───────────────────────────────────────────────────────────────
+// Handles v/vt/vn and v//vn face formats; fan-triangulates polygons.
+static bool load_obj(const char* path, Prims& out){
+    FILE* f=fopen(path,"r");
+    if(!f){fprintf(stderr,"Cannot open: %s\n",path);return false;}
+    std::vector<std::array<float,3>> verts;
+    char line[1024];
+    while(fgets(line,sizeof(line),f)){
+        if(line[0]=='v'&&line[1]==' '){
+            float x,y,z;
+            if(sscanf(line+2,"%f %f %f",&x,&y,&z)==3)
+                verts.push_back({x,y,z});
+        } else if(line[0]=='f'&&line[1]==' '){
+            std::vector<int> idx;
+            char* p=line+2;
+            while(*p&&*p!='\n'&&*p!='\r'){
+                while(*p==' ') p++;
+                if(!*p||*p=='\n'||*p=='\r') break;
+                char* end; long vi=strtol(p,&end,10);
+                if(end==p){p++;continue;}
+                p=end;
+                if(*p=='/'){ p++; strtol(p,&p,10); }
+                if(*p=='/'){ p++; strtol(p,&p,10); }
+                int i=(int)(vi<0?(long)verts.size()+vi:vi-1);
+                if(i>=0&&i<(int)verts.size()) idx.push_back(i);
+            }
+            for(int i=1;i+1<(int)idx.size();i++){
+                int a=idx[0],b=idx[i],c=idx[i+1];
+                AABB box;
+                for(int vi:{a,b,c})
+                    for(int k=0;k<3;k++){
+                        box.lo[k]=std::min(box.lo[k],verts[vi][k]);
+                        box.hi[k]=std::max(box.hi[k],verts[vi][k]);
+                    }
+                out.push_back({box,(int)out.size()});
+            }
+        }
+    }
+    fclose(f);
+    fprintf(stderr,"Loaded %s: %d vertices -> %d triangles\n",
+            path,(int)verts.size(),(int)out.size());
+    return !out.empty();
+}
+
+// Extract mesh name from path (last path component, strip extension)
+static std::string mesh_name(const std::string& path){
+    size_t s=path.find_last_of("/\\");
+    std::string base=(s==std::string::npos)?path:path.substr(s+1);
+    size_t d=base.rfind('.');
+    return (d==std::string::npos)?base:base.substr(0,d);
+}
+
 // ─── JSON helpers ─────────────────────────────────────────────────────────────
 static std::string f2s(float v){char buf[32];snprintf(buf,32,"%.6g",v);return buf;}
 
@@ -470,7 +522,7 @@ std::string nodes_to_json(const std::vector<Node>& nodes){
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
-int main(){
+int main(int argc, char* argv[]){
     struct TestCase{int N;float R;float range;bool is_tri;};
     std::vector<TestCase> tests={
         {128,   1.0f, 12.0f, false},
@@ -498,6 +550,53 @@ int main(){
         {"Binned4+A8 (T=32)",   [](auto& ns,auto& ps,int d){return build_hybrid_binned4_A8(ns,ps,d);}},
     };
 
+    // ── OBJ mode: bvh3d_compute.exe path/to/mesh.obj ──────────────────────────
+    if(argc>1){
+        Prims base;
+        if(!load_obj(argv[1],base)) return 1;
+        int N=(int)base.size();
+        std::string mname=mesh_name(argv[1]);
+        // adaptive runs: fewer for large meshes (slow strategies)
+        int RUNS = N<200000?5 : N<600000?3 : 1;
+        fprintf(stderr,"\n=== OBJ mesh: %s  N=%d  runs=%d ===\n",
+                mname.c_str(),N,RUNS);
+        std::ostringstream json;
+        json<<"{\"mode\":\"obj\",\"mesh\":\""<<mname<<"\",\"N\":"<<N
+            <<",\"strategies\":[";
+        bool first=true;
+        for(auto& st:strats){
+            double dt=0.0;
+            std::vector<Node> nodes;
+            for(int run=0;run<RUNS;run++){
+                nodes.clear(); nodes.reserve(N*4);
+                auto t0=std::chrono::high_resolution_clock::now();
+                st.fn(nodes,base,0);
+                auto t1=std::chrono::high_resolution_clock::now();
+                dt+=std::chrono::duration<double,std::milli>(t1-t0).count();
+            }
+            dt/=RUNS;
+            double cost=sah_cost(nodes);
+            auto s=tree_stats(nodes);
+            assert(s.prim_count==N);
+            fprintf(stderr,"  [%-22s]  time=%9.2f ms  SAH=%9.4f  nodes=%7d  leaves=%7d  maxdepth=%d\n",
+                    st.name.c_str(),dt,cost,s.nodes,s.leaves,s.max_depth);
+            if(!first) json<<",";
+            first=false;
+            json<<"{\"name\":\""<<st.name<<"\""
+                <<",\"build_time_ms\":"<<dt
+                <<",\"sah_cost\":"<<cost
+                <<",\"node_count\":"<<s.nodes
+                <<",\"leaf_count\":"<<s.leaves
+                <<",\"max_depth\":"<<s.max_depth
+                <<"}";
+        }
+        json<<"]}";
+        std::cout<<json.str()<<std::endl;
+        fprintf(stderr,"\nDone.\n");
+        return 0;
+    }
+
+    // ── Synthetic mode (no args) ───────────────────────────────────────────────
     std::ostringstream json;
     json<<"{\"test_cases\":[";
 
