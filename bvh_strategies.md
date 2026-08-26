@@ -392,6 +392,8 @@ Median > 2way SAH ≈ Binned SAH > Binned+SAH ≈ Binned+SAH+Coll ≈ Binned Col
 | Binned+A4 (T=32) | 顶部 Binned 2-way，底部（N≤32）A4 |
 | Binned4+A4 (T=32) | 顶部 2 轮内联 Binned（~4 叉），底部 A4 |
 | Binned4+A8 (T=32) | 顶部 2 轮内联 Binned（~4 叉），底部 A8 |
+| Binned4+Grid4 (T=32) | 顶部 2 轮内联 Binned（~4 叉），底部 Grid4 |
+| Binned4+Grid8 (T=32) | 顶部 2 轮内联 Binned（~4 叉），底部 Grid8 |
 
 ---
 
@@ -415,6 +417,8 @@ Median > 2way SAH ≈ Binned SAH > Binned+SAH ≈ Binned+SAH+Coll ≈ Binned Col
 | Binned+A4 (T=32) | 81.8 | 101.97 | 77925 | 56228 | 15 |
 | Binned4+A4 (T=32) | 82.8 | 68.78 | 75202 | 56228 | 9 |
 | **Binned4+A8 (T=32)** | **80.5** | **66.45** | 61426 | 51561 | 9 |
+| Binned4+Grid4 (T=32) | 69.2 | 76.56 | 66049 | 46533 | 10 |
+| **Binned4+Grid8 (T=32)** | **61.6** | 67.76 | 64299 | 52060 | 10 |
 
 #### 三角形（3D）图元
 
@@ -434,6 +438,8 @@ Median > 2way SAH ≈ Binned SAH > Binned+SAH ≈ Binned+SAH+Coll ≈ Binned Col
 | Binned+A4 (T=32) | 78.7 | 96.13 | 78076 | 56337 | 15 |
 | Binned4+A4 (T=32) | 80.5 | 63.64 | 75352 | 56337 | 9 |
 | **Binned4+A8 (T=32)** | **77.5** | **61.49** | 60882 | 51145 | 9 |
+| Binned4+Grid4 (T=32) | 74.4 | 70.27 | 66407 | 46890 | 10 |
+| **Binned4+Grid8 (T=32)** | **67.6** | 62.77 | 63945 | 51884 | 9 |
 
 ---
 
@@ -457,6 +463,8 @@ Median > 2way SAH ≈ Binned SAH > Binned+SAH ≈ Binned+SAH+Coll ≈ Binned Col
 | Binned+A4 (T=32) | 120.0 | 32.88 |
 | Binned4+A4 (T=32) | 128.3 | 22.18 |
 | **Binned4+A8 (T=32)** | **121.6** | **21.60** |
+| Binned4+Grid4 (T=32) | 106.1 | 24.00 |
+| **Binned4+Grid8 (T=32)** | **98.2** | 22.09 |
 
 #### Chinese Dragon（871,306 三角形）
 
@@ -476,6 +484,8 @@ Median > 2way SAH ≈ Binned SAH > Binned+SAH ≈ Binned+SAH+Coll ≈ Binned Col
 | Binned+A4 (T=32) | 764.7 | 45.31 |
 | Binned4+A4 (T=32) | 814.1 | 29.86 |
 | **Binned4+A8 (T=32)** | **789.2** | **28.64** |
+| Binned4+Grid4 (T=32) | 706.8 | 31.52 |
+| **Binned4+Grid8 (T=32)** | **688.5** | 29.60 |
 
 ---
 
@@ -495,3 +505,9 @@ Median > 2way SAH ≈ Binned SAH > Binned+SAH ≈ Binned+SAH+Coll ≈ Binned Col
    - Grid 比同叉数的 A/B 快约 30%（Dragon：Grid4 1477 ms vs A4 2216 ms），因为无需对子组重新扫描轴。
    - Grid8 比 Grid4 更快（1100 ms vs 1477 ms）：三轴分割使每格图元更少，递归深度更浅。
    - 结论：全局网格分割是自适应分割的快速近似，固定损失约 11% SAH，适合对构建速度要求严格而对质量要求宽松的场景。
+
+6. **Binned4+Grid 混合（顶部 Binned 4 叉 + 底部 Grid）**：
+   - **Binned4+Grid8 是全部策略中构建最快的**（Dragon：688 ms，比纯 Binned SAH 的 760 ms 还快约 10%），因为底部 Grid8 无需逐组重新扫描。
+   - SAH 仅比 Binned4+A8 差约 3%（Dragon：29.6 vs 28.6），但比其快约 13%。
+   - Bunny 上同样成立：98 ms（全场最快）、SAH=22.1，与 Binned4+A8 的 21.6 差约 2%。
+   - 结论：若追求极致构建速度，Binned4+Grid8 优于 Binned4+A8；两者 SAH 差距可忽略（2~3%）。

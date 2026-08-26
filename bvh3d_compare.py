@@ -203,9 +203,13 @@ SLUG = {
     'A8 Independent':       '3b_A8_independent',
     'B4 Hierarchical':      '4_B4_hierarchical',
     'B8 Hierarchical':      '4b_B8_hierarchical',
+    'Grid4 (best 2-axis)':  '5_grid4',
+    'Grid8 (best 3-axis)':  '5b_grid8',
     'Binned+A4 (T=32)':     '7_binned_A4_32',
     'Binned4+A4 (T=32)':    '8_binned4_A4_32',
     'Binned4+A8 (T=32)':    '8b_binned4_A8_32',
+    'Binned4+Grid4 (T=32)': '9_binned4_grid4_32',
+    'Binned4+Grid8 (T=32)': '9b_binned4_grid8_32',
 }
 
 # ════════════════════════════════════════════════════════════════════════════

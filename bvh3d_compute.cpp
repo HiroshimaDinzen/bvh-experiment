@@ -479,6 +479,50 @@ int build_hybrid_binned4_A8(std::vector<Node>& ns,const Prims& ps,int d){
     return idx;
 }
 
+// Binned4+Grid4 (T=32): top 2-round inline Binned (~4-way), bottom Grid4
+int build_hybrid_binned4_grid4(std::vector<Node>& ns,const Prims& ps,int d){
+    if((int)ps.size()<=HYBRID_THRESH) return build_grid4(ns,ps,d);
+    int idx=new_node(ns,ps,d);
+    float pa=ns[idx].box.hsa();
+    Prims lp,rp;
+    if(!binned_split_2way(ps,pa,16,lp,rp)){make_leaf(ns,idx,ps);return idx;}
+    std::vector<Prims> groups;
+    for(Prims& sub:std::vector<Prims>{lp,rp}){
+        Prims sl,sr;
+        float spa=union_box(sub).hsa();
+        if((int)sub.size()>HYBRID_THRESH&&binned_split_2way(sub,spa,16,sl,sr)){
+            groups.push_back(std::move(sl));
+            groups.push_back(std::move(sr));
+        } else {
+            groups.push_back(std::move(sub));
+        }
+    }
+    for(auto& g:groups) ns[idx].children.push_back(build_hybrid_binned4_grid4(ns,g,d+1));
+    return idx;
+}
+
+// Binned4+Grid8 (T=32): top 2-round inline Binned (~4-way), bottom Grid8
+int build_hybrid_binned4_grid8(std::vector<Node>& ns,const Prims& ps,int d){
+    if((int)ps.size()<=HYBRID_THRESH) return build_grid8(ns,ps,d);
+    int idx=new_node(ns,ps,d);
+    float pa=ns[idx].box.hsa();
+    Prims lp,rp;
+    if(!binned_split_2way(ps,pa,16,lp,rp)){make_leaf(ns,idx,ps);return idx;}
+    std::vector<Prims> groups;
+    for(Prims& sub:std::vector<Prims>{lp,rp}){
+        Prims sl,sr;
+        float spa=union_box(sub).hsa();
+        if((int)sub.size()>HYBRID_THRESH&&binned_split_2way(sub,spa,16,sl,sr)){
+            groups.push_back(std::move(sl));
+            groups.push_back(std::move(sr));
+        } else {
+            groups.push_back(std::move(sub));
+        }
+    }
+    for(auto& g:groups) ns[idx].children.push_back(build_hybrid_binned4_grid8(ns,g,d+1));
+    return idx;
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 // Collapse k=2
 // ════════════════════════════════════════════════════════════════════════════
@@ -609,6 +653,8 @@ int main(int argc, char* argv[]){
         {"Binned+A4 (T=32)",    [](auto& ns,auto& ps,int d){return build_hybrid_binned_A4 (ns,ps,d);}},
         {"Binned4+A4 (T=32)",   [](auto& ns,auto& ps,int d){return build_hybrid_binned4_A4(ns,ps,d);}},
         {"Binned4+A8 (T=32)",   [](auto& ns,auto& ps,int d){return build_hybrid_binned4_A8(ns,ps,d);}},
+        {"Binned4+Grid4 (T=32)",[](auto& ns,auto& ps,int d){return build_hybrid_binned4_grid4(ns,ps,d);}},
+        {"Binned4+Grid8 (T=32)",[](auto& ns,auto& ps,int d){return build_hybrid_binned4_grid8(ns,ps,d);}},
     };
 
     // ── OBJ mode: bvh3d_compute.exe path/to/mesh.obj ──────────────────────────
