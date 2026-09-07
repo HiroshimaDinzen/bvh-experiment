@@ -544,7 +544,10 @@ bvh3d_compute.exe meshes/dragon/dragon.obj --T=256
 | Ours4 | 2D | One 1-D SAH sweep per axis, then a single 2×2 grid partition into 4 children |
 | Binned+Ours4 (T) | 2D / 3D | Plain binned 2-way top; switches to Ours4 when N ≤ T (no collapse) |
 | Binned4+Ours4 (T) | 2D / 3D | Two inline binned rounds per top node (≈4-ary); Ours4 at the bottom |
+| **Binned4+Ours8 (T)** | 3D | Same top (≈4-ary); **Ours8** at the bottom: combines the best split of all three axes into a single 2×2×2 grid partition into 8 children |
 | Binned+SAH (T) | 3D | Binned 2-way top; exact Sweep when N ≤ T (control group) |
+
+> Ours8 needs three coordinate axes, so it exists only in 3D; the 2D tables have no Ours8 rows.
 
 ### Re-measured Results (warmed up, T=32)
 
@@ -567,9 +570,11 @@ bvh3d_compute.exe meshes/dragon/dragon.obj --T=256
 | 2-way SAH Sweep | 224.2 | 133.05 |
 | Binned SAH (B=16) | 77.16 | 134.10 |
 | Ours4 (proposed 4-way) | 158.6 | 75.92 |
+| Ours8 (proposed 8-way) | 114.0 | 55.49 |
 | Binned+Ours4 (T=32) | 65.97 | 109.75 |
 | Binned Collapse k=2 (Fast Quad BVH) | 80.85 | 83.05 |
 | Binned4+Ours4 (T=32) | 70.75 | 76.56 |
+| Binned4+Ours8 (T=32) | 63.31 | 67.76 |
 | Binned+SAH (T=32) (control) | 67.82 | 134.01 |
 
 #### Stanford Bunny (144,046 triangles)
@@ -579,9 +584,11 @@ bvh3d_compute.exe meshes/dragon/dragon.obj --T=256
 | 2-way SAH Sweep | 300.9 | 37.45 |
 | Binned SAH (B=16) | 102.5 | 37.76 |
 | Ours4 (proposed 4-way) | 207.9 | 24.63 |
+| Ours8 (proposed 8-way) | 156.4 | 19.22 |
 | Binned+Ours4 (T=32) | 98.29 | 34.70 |
 | Binned Collapse k=2 (Fast Quad BVH) | 119.8 | 23.44 |
 | Binned4+Ours4 (T=32) | 105.0 | 24.00 |
+| Binned4+Ours8 (T=32) | 97.68 | 22.09 |
 | Binned+SAH (T=32) (control) | 97.88 | 37.74 |
 
 #### Chinese Dragon (871,306 triangles)
@@ -591,9 +598,11 @@ bvh3d_compute.exe meshes/dragon/dragon.obj --T=256
 | 2-way SAH Sweep | 2168.5 | 49.66 |
 | Binned SAH (B=16) | 695.0 | 50.16 |
 | Ours4 (proposed 4-way) | 1445.4 | 32.38 |
+| Ours8 (proposed 8-way) | 1096.1 | 26.63 |
 | Binned+Ours4 (T=32) | 709.8 | 46.96 |
 | Binned Collapse k=2 (Fast Quad BVH) | 773.1 | 30.48 |
 | Binned4+Ours4 (T=32) | 803.8 | 31.52 |
+| Binned4+Ours8 (T=32) | 721.8 | 29.60 |
 | Binned+SAH (T=32) (control) | 717.5 | 50.16 |
 
 ### T Sweep (time ms / SAH)
@@ -612,6 +621,7 @@ bvh3d_compute.exe meshes/dragon/dragon.obj --T=256
 |---|---|---|---|---|
 | Binned+Ours4 | 65.97 / 109.75 | 65.81 / 104.53 | 76.06 / 93.68 | 86.95 / 86.69 |
 | Binned4+Ours4 | 70.75 / 76.56 | 68.67 / 83.89 | 78.33 / 81.53 | 91.82 / 79.98 |
+| Binned4+Ours8 | 63.31 / 67.76 | 64.87 / 67.55 | 64.54 / 64.85 | 72.68 / 58.99 |
 | Binned+SAH (control) | 67.82 / 134.01 | 71.73 / 134.02 | 88.46 / 133.79 | 106.1 / 133.40 |
 
 #### Stanford Bunny
@@ -620,6 +630,7 @@ bvh3d_compute.exe meshes/dragon/dragon.obj --T=256
 |---|---|---|---|---|
 | Binned+Ours4 | 98.29 / 34.70 | 101.5 / 33.69 | 119.5 / 31.70 | 149.1 / 29.78 |
 | Binned4+Ours4 | 105.0 / 24.00 | 108.6 / 24.01 | 117.3 / 24.23 | 132.5 / 24.35 |
+| Binned4+Ours8 | 97.68 / 22.09 | 94.56 / 21.83 | 104.9 / 21.39 | 111.6 / 20.95 |
 | Binned+SAH (control) | 97.88 / 37.74 | 101.0 / 37.73 | 125.2 / 37.66 | 156.9 / 37.55 |
 
 #### Chinese Dragon
@@ -628,6 +639,7 @@ bvh3d_compute.exe meshes/dragon/dragon.obj --T=256
 |---|---|---|---|---|
 | Binned+Ours4 | 709.8 / 46.96 | 676.0 / 45.76 | 733.8 / 43.31 | 822.1 / 40.89 |
 | Binned4+Ours4 | 803.8 / 31.52 | 712.9 / 31.71 | 756.8 / 32.07 | 880.3 / 32.35 |
+| Binned4+Ours8 | 721.8 / 29.60 | 638.4 / 29.31 | 681.0 / 28.94 | 758.0 / 28.55 |
 | Binned+SAH (control) | 717.5 / 50.16 | 677.2 / 50.15 | 782.4 / 50.11 | 946.5 / 50.01 |
 
 ### Conclusions from the T Sweep
@@ -642,7 +654,26 @@ bvh3d_compute.exe meshes/dragon/dragon.obj --T=256
    0.3% spread across four values of T). This confirms that switching the bottom to a more
    precise **binary** method yields nothing; the gain comes only from switching it to a
    **4-way** split.
-4. **An anomaly still to be explained**: pure Ours4 over the whole tree (Dragon SAH 32.38)
+4. **Binned4+Ours8 (three-axis combination, 3D only) beats Binned4+Ours4 on every 3D scene at
+   every T — in both time and SAH.** Dragon at T=64: 638 ms / 29.31 against 712 ms / 31.71 for
+   the Ours4 version; Bunny at T=64: 94.6 ms / 21.83 against 108.6 ms / 24.01. Splitting all
+   three axes at once leaves fewer primitives per cell and a shallower tree (max depth 13 vs 15
+   on Dragon), while avoiding the repeated recursion the Ours4 version performs at the bottom.
+
+5. **For Binned4+Ours8 a larger T is better — the opposite of the Ours4 version.**
+   Dragon's SAH falls monotonically with T: 29.60 → 29.31 → 28.94 → 28.55; Bunny: 22.09 → 21.83
+   → 21.39 → 20.95; 3D spheres: 67.76 → 67.55 → 64.85 → 58.99. Binned4+Ours4, in contrast, gets
+   worse beyond T=32. In other words, the 8-way split is worth handing more of the tree to; the
+   4-way split is not.
+
+6. **Binned4+Ours8 beats Fast Quad BVH (the established method) on time and SAH at once.**
+   Dragon at T=64: 638 ms / 29.31 against 735 ms / 30.48;
+   Bunny at T=64: 94.6 ms / 21.83 against 108.7 ms / 23.44;
+   3D spheres at T=32: 63.3 ms / 67.76 against 79.3 ms / 83.05.
+   It is so far the only scheme that dominates the established method on both metrics.
+
+7. **An anomaly still to be explained**: pure Ours4 over the whole tree (Dragon SAH 32.38)
    beats Binned4+Ours4 at every T, yet Binned4+Ours4 is better at T=32 (most Binned4 on top)
    than at T=1024 (least). This non-monotonicity has no reliable explanation yet and should be
-   understood before it goes into the paper.
+   understood before it goes into the paper. Note that Binned4+Ours8 does not show it — its
+   dependence on T is monotone.

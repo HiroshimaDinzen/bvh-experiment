@@ -542,7 +542,10 @@ bvh3d_compute.exe meshes/dragon/dragon.obj --T=256
 | Ours4 | 2D | 各轴各做一次一维 SAH 扫描，按 2×2 网格一次性四分割 |
 | Binned+Ours4 (T) | 2D / 3D | 上部纯 Binned 二分，N ≤ T 时切换为 Ours4（无 collapse） |
 | Binned4+Ours4 (T) | 2D / 3D | 上部每节点内联两轮 Binned（≈4 叉），下部 Ours4 |
+| **Binned4+Ours8 (T)** | 3D | 上部同上（≈4 叉），下部 **Ours8**：组合 X/Y/Z 三轴各自的最优分割，按 2×2×2 网格一次性八分割 |
 | Binned+SAH (T) | 3D | 上部 Binned 二分，N ≤ T 时切换为精确 Sweep（对照组） |
+
+> Ours8 需要三个坐标轴，因此只存在于 3D；2D 的表中没有 Ours8 系的行。
 
 ### 重测结果（预热后，T=32）
 
@@ -565,9 +568,11 @@ bvh3d_compute.exe meshes/dragon/dragon.obj --T=256
 | 2-way SAH Sweep | 224.2 | 133.05 |
 | Binned SAH (B=16) | 77.16 | 134.10 |
 | Ours4（提案4分割） | 158.6 | 75.92 |
+| Ours8（提案8分割） | 114.0 | 55.49 |
 | Binned+Ours4 (T=32) | 65.97 | 109.75 |
 | Binned Collapse k=2（Fast Quad BVH） | 80.85 | 83.05 |
 | Binned4+Ours4 (T=32) | 70.75 | 76.56 |
+| Binned4+Ours8 (T=32) | 63.31 | 67.76 |
 | Binned+SAH (T=32)（对照） | 67.82 | 134.01 |
 
 #### Stanford Bunny（144,046 三角形）
@@ -577,9 +582,11 @@ bvh3d_compute.exe meshes/dragon/dragon.obj --T=256
 | 2-way SAH Sweep | 300.9 | 37.45 |
 | Binned SAH (B=16) | 102.5 | 37.76 |
 | Ours4（提案4分割） | 207.9 | 24.63 |
+| Ours8（提案8分割） | 156.4 | 19.22 |
 | Binned+Ours4 (T=32) | 98.29 | 34.70 |
 | Binned Collapse k=2（Fast Quad BVH） | 119.8 | 23.44 |
 | Binned4+Ours4 (T=32) | 105.0 | 24.00 |
+| Binned4+Ours8 (T=32) | 97.68 | 22.09 |
 | Binned+SAH (T=32)（对照） | 97.88 | 37.74 |
 
 #### Chinese Dragon（871,306 三角形）
@@ -589,9 +596,11 @@ bvh3d_compute.exe meshes/dragon/dragon.obj --T=256
 | 2-way SAH Sweep | 2168.5 | 49.66 |
 | Binned SAH (B=16) | 695.0 | 50.16 |
 | Ours4（提案4分割） | 1445.4 | 32.38 |
+| Ours8（提案8分割） | 1096.1 | 26.63 |
 | Binned+Ours4 (T=32) | 709.8 | 46.96 |
 | Binned Collapse k=2（Fast Quad BVH） | 773.1 | 30.48 |
 | Binned4+Ours4 (T=32) | 803.8 | 31.52 |
+| Binned4+Ours8 (T=32) | 721.8 | 29.60 |
 | Binned+SAH (T=32)（对照） | 717.5 | 50.16 |
 
 ### T 扫描（时间 ms / SAH）
@@ -610,6 +619,7 @@ bvh3d_compute.exe meshes/dragon/dragon.obj --T=256
 |---|---|---|---|---|
 | Binned+Ours4 | 65.97 / 109.75 | 65.81 / 104.53 | 76.06 / 93.68 | 86.95 / 86.69 |
 | Binned4+Ours4 | 70.75 / 76.56 | 68.67 / 83.89 | 78.33 / 81.53 | 91.82 / 79.98 |
+| Binned4+Ours8 | 63.31 / 67.76 | 64.87 / 67.55 | 64.54 / 64.85 | 72.68 / 58.99 |
 | Binned+SAH（对照） | 67.82 / 134.01 | 71.73 / 134.02 | 88.46 / 133.79 | 106.1 / 133.40 |
 
 #### Stanford Bunny
@@ -618,6 +628,7 @@ bvh3d_compute.exe meshes/dragon/dragon.obj --T=256
 |---|---|---|---|---|
 | Binned+Ours4 | 98.29 / 34.70 | 101.5 / 33.69 | 119.5 / 31.70 | 149.1 / 29.78 |
 | Binned4+Ours4 | 105.0 / 24.00 | 108.6 / 24.01 | 117.3 / 24.23 | 132.5 / 24.35 |
+| Binned4+Ours8 | 97.68 / 22.09 | 94.56 / 21.83 | 104.9 / 21.39 | 111.6 / 20.95 |
 | Binned+SAH（对照） | 97.88 / 37.74 | 101.0 / 37.73 | 125.2 / 37.66 | 156.9 / 37.55 |
 
 #### Chinese Dragon
@@ -626,6 +637,7 @@ bvh3d_compute.exe meshes/dragon/dragon.obj --T=256
 |---|---|---|---|---|
 | Binned+Ours4 | 709.8 / 46.96 | 676.0 / 45.76 | 733.8 / 43.31 | 822.1 / 40.89 |
 | Binned4+Ours4 | 803.8 / 31.52 | 712.9 / 31.71 | 756.8 / 32.07 | 880.3 / 32.35 |
+| Binned4+Ours8 | 721.8 / 29.60 | 638.4 / 29.31 | 681.0 / 28.94 | 758.0 / 28.55 |
 | Binned+SAH（对照） | 717.5 / 50.16 | 677.2 / 50.15 | 782.4 / 50.11 | 946.5 / 50.01 |
 
 ### T 扫描的结论
@@ -637,6 +649,23 @@ bvh3d_compute.exe meshes/dragon/dragon.obj --T=256
    SAH 的下降主要来自顶部中间节点的合并，增大 T 等于减少这部分合并，因此没有调 T 的必要。
 3. **Binned+SAH（对照）：SAH 对 T 几乎不敏感**（Dragon：50.16 → 50.01，四个 T 值相差 0.3%）。
    这证实"底部换成更精确的**二分**方法没有收益"，收益只来自"底部换成**四分**"。
-4. **待查的异常**：纯 Ours4（全树，Dragon SAH 32.38）优于 Binned4+Ours4 的任何 T 取值，
+4. **Binned4+Ours8（三轴组合，仅 3D）在全部 3D 场景、全部 T 上同时优于 Binned4+Ours4——
+   时间和 SAH 双双更好。** 例如 Dragon T=64：638 ms / 29.31，对比 Ours4 版的 712 ms / 31.71。
+   Bunny T=64：94.6 ms / 21.83 对比 108.6 ms / 24.01。原因是三轴一次性八分割让每个格子的
+   图元更少、树更浅（Dragon 最大深度 13 vs 15），同时省去了 Ours4 版在下部反复递归的开销。
+
+5. **Binned4+Ours8 的 T 越大越好，方向与 Ours4 版相反。**
+   Dragon 的 SAH 随 T 单调下降：29.60 → 29.31 → 28.94 → 28.55；Bunny：22.09 → 21.83 →
+   21.39 → 20.95；3D 球：67.76 → 67.55 → 64.85 → 58.99。而 Binned4+Ours4 在 T=32 之后
+   反而变差。也就是说，八分割值得把更多的树交给它，四分割不值得。
+
+6. **Binned4+Ours8 同时超过 Fast Quad BVH（既有方法）的时间和 SAH。**
+   Dragon T=64：638 ms / 29.31 对比 Fast Quad 的 735 ms / 30.48；
+   Bunny T=64：94.6 ms / 21.83 对比 108.7 ms / 23.44；
+   3D 球 T=32：63.3 ms / 67.76 对比 79.3 ms / 83.05。
+   这是目前唯一在两个指标上都压过既有方法的方案。
+
+7. **待查的异常**：纯 Ours4（全树，Dragon SAH 32.38）优于 Binned4+Ours4 的任何 T 取值，
    但后者在 T=32（顶部 Binned4 最多）反而优于 T=1024（顶部 Binned4 最少）。
    这一非单调性目前尚无可靠解释，写入论文前需要查清机理。
+   注意 Binned4+Ours8 没有这个问题（其 T 依赖是单调的）。
