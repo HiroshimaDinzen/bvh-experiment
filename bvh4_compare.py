@@ -210,6 +210,8 @@ SLUG = {
     'Binned4+A (T=32)':         '9_binned4_A_32',
     'Binned4+Coll (T=32)':      '9c_binned4_coll_32',
     'Binned+SAH+Coll (T=32)':   '9b_binned_SAH_coll_32',
+    'Ours4':                    '10_ours4',
+    'Binned+Ours4 (T=32)':      '11_binned_ours4_32',
 }
 
 # ════════════════════════════════════════════════════════════════════════════

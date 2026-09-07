@@ -20,7 +20,8 @@
 static const float C_TRAV        = 1.0f;
 static const float C_ISECT       = 1.0f;
 static const int   MAX_LEAF      = 4;
-static const int   HYBRID_THRESH = 32;  // switch from Binned to precise method below this count
+static int         HYBRID_THRESH = 32;  // switch from Binned to precise method below this count
+                                        // (runtime-settable via --T=<n>)
 
 // ─── AABB 2-D ─────────────────────────────────────────────────────────────────
 struct AABB {
@@ -443,6 +444,35 @@ int build_D(std::vector<Node>& ns, const Prims& ps, int d){
     return idx;
 }
 
+// ─── Ours4 (proposed): global best X split × global best Y split ─────────────
+// One 1-D SAH sweep per axis on the WHOLE node, then assign each primitive
+// into a 2×2 grid by centroid. No per-child re-search, no binary tree.
+static float split_thresh(const Split& sp, int ax){
+    int s=sp.s;
+    return (sp.sorted[s].box.centroid(ax)+sp.sorted[s+1].box.centroid(ax))*0.5f;
+}
+int build_ours4(std::vector<Node>& ns,const Prims& ps,int d){
+    int idx=new_node(ns,ps,d); int n=(int)ps.size();
+    if(n<=MAX_LEAF){make_leaf(ns,idx,ps);return idx;}
+    Split sx=best_1d(ps,0), sy=best_1d(ps,1);
+    bool hx=sx.s>=0, hy=sy.s>=0;
+    if(!hx&&!hy){make_leaf(ns,idx,ps);return idx;}
+    float tx=hx?split_thresh(sx,0):0.f;
+    float ty=hy?split_thresh(sy,1):0.f;
+    Prims groups[4];
+    for(auto& p:ps){
+        int k=0;
+        if(hx&&p.box.centroid(0)>=tx) k|=1;
+        if(hy&&p.box.centroid(1)>=ty) k|=2;
+        groups[k].push_back(p);
+    }
+    std::vector<Prims> valid;
+    for(auto& g:groups) if(!g.empty()) valid.push_back(std::move(g));
+    if(valid.size()<=1){make_leaf(ns,idx,ps);return idx;}
+    for(auto& g:valid) ns[idx].children.push_back(build_ours4(ns,g,d+1));
+    return idx;
+}
+
 // ─── Hybrid helpers ───────────────────────────────────────────────────────────
 // binned_split_2way: perform one Binned SAH (B=n_bins) 2-way split.
 //   pa     = half-perimeter of parent AABB (pre-computed)
@@ -504,6 +534,46 @@ int build_hybrid_binned_A(std::vector<Node>& ns, const Prims& ps, int d) {
     int l = build_hybrid_binned_A(ns, lp, d + 1);
     int r = build_hybrid_binned_A(ns, rp, d + 1);
     ns[idx].children = {l, r};
+    return idx;
+}
+
+// ─── Binned+Ours4 hybrid (threshold T=HYBRID_THRESH), NO collapse ────────────
+// N > T : plain Binned SAH (B=16) 2-way split, recurse with this function
+// N ≤ T : Ours4 (proposed 4-way grid split)
+int build_hybrid_binned_ours4(std::vector<Node>& ns, const Prims& ps, int d) {
+    if ((int)ps.size() <= HYBRID_THRESH) return build_ours4(ns, ps, d);
+    int idx = new_node(ns, ps, d);
+    float pa = ns[idx].box.half_perim();
+    Prims lp, rp;
+    if (!binned_split_2way(ps, pa, 16, lp, rp)) { make_leaf(ns, idx, ps); return idx; }
+    int l = build_hybrid_binned_ours4(ns, lp, d + 1);
+    int r = build_hybrid_binned_ours4(ns, rp, d + 1);
+    ns[idx].children = {l, r};
+    return idx;
+}
+
+// ─── Binned4+Ours4 hybrid (threshold T=HYBRID_THRESH) ────────────────────────
+// N > T : two inline Binned SAH (B=16) rounds per node -> up to 4 children
+//         (the intermediate binary level is merged away, like a top collapse)
+// N ≤ T : Ours4 (proposed 4-way grid split)
+int build_hybrid_binned4_ours4(std::vector<Node>& ns, const Prims& ps, int d) {
+    if ((int)ps.size() <= HYBRID_THRESH) return build_ours4(ns, ps, d);
+    int idx = new_node(ns, ps, d);
+    float pa = ns[idx].box.half_perim();
+    Prims lp, rp;
+    if (!binned_split_2way(ps, pa, 16, lp, rp)) { make_leaf(ns, idx, ps); return idx; }
+    std::vector<Prims> groups;
+    for (Prims& sub : std::vector<Prims>{lp, rp}) {
+        Prims sl, sr;
+        float spa = union_box(sub).half_perim();
+        if ((int)sub.size() > HYBRID_THRESH && binned_split_2way(sub, spa, 16, sl, sr)) {
+            groups.push_back(std::move(sl));
+            groups.push_back(std::move(sr));
+        } else {
+            groups.push_back(std::move(sub));
+        }
+    }
+    for (auto& g : groups) ns[idx].children.push_back(build_hybrid_binned4_ours4(ns, g, d + 1));
     return idx;
 }
 
@@ -665,7 +735,14 @@ std::string nodes_to_json(const std::vector<Node>& nodes){
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
-int main(){
+int main(int argc, char* argv[]){
+    // --T=<n> : hybrid switch threshold (default 32)
+    for(int i=1;i<argc;i++){
+        std::string a=argv[i];
+        if(a.rfind("--T=",0)==0) HYBRID_THRESH=std::max(1,atoi(a.c_str()+4));
+    }
+    fprintf(stderr,"HYBRID_THRESH (T) = %d\n",HYBRID_THRESH);
+
     struct TestCase { int N; float R; float range; bool run_C; bool is_tri; };
     std::vector<TestCase> tests = {
         { 128,    1.0f,  12.0f, true,  false },  // circle
@@ -693,7 +770,15 @@ int main(){
         {"Binned4+A (T=32)",       [](auto& ns,auto& ps,int d){return build_hybrid_binned4_A            (ns,ps,d);}, false},
         {"Binned4+Coll (T=32)",    [](auto& ns,auto& ps,int d){return build_hybrid_binned4_coll          (ns,ps,d);}, false},
         {"Binned+SAH+Coll (T=32)", [](auto& ns,auto& ps,int d){return build_hybrid_binned_sweep_collapsed(ns,ps,d);},false},
+        {"Ours4",                  [](auto& ns,auto& ps,int d){return build_ours4                        (ns,ps,d);}, false},
+        {"Binned+Ours4 (T=32)",    [](auto& ns,auto& ps,int d){return build_hybrid_binned_ours4          (ns,ps,d);}, false},
+        {"Binned4+Ours4 (T=32)",   [](auto& ns,auto& ps,int d){return build_hybrid_binned4_ours4         (ns,ps,d);}, false},
     };
+    // reflect the actual threshold in the printed strategy names
+    for(auto& st:strats){
+        size_t p=st.name.find("T=32");
+        if(p!=std::string::npos) st.name.replace(p,4,"T="+std::to_string(HYBRID_THRESH));
+    }
 
     std::mt19937 rng_seed(0);  // master seed
 
@@ -761,8 +846,13 @@ int main(){
                 continue;
             }
             const int RUNS = 10;
+            const int WARMUP = 2;          // untimed builds: warm cache / branch predictors
             double dt = 0.0;
             std::vector<Node> nodes;
+            for(int w=0;w<WARMUP;w++){
+                nodes.clear(); nodes.reserve(tc.N*4);
+                st.fn(nodes,base,0);
+            }
             for(int run=0;run<RUNS;run++){
                 nodes.clear(); nodes.reserve(tc.N*4);
                 auto t0=std::chrono::high_resolution_clock::now();

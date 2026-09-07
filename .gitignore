@@ -28,3 +28,9 @@ meshes/
 
 # ── Claude Code ───────────────────────────────────────────────────────────────
 .claude/
+
+# Presentation decks (kept local)
+*.pptx
+
+# Downloaded reference papers (copyrighted, kept local)
+references/

@@ -373,14 +373,14 @@ Median > 2way SAH ≈ Binned SAH > Binned+SAH ≈ Binned+SAH+Coll ≈ Binned Col
 - 4th-level greedy: each of B4's four groups gets one more best_any cut
 - Arity: 2 – 8
 
-**Grid4 (global two-axis grid)**
+**Ours4 (global two-axis grid)**
 
 - Run 3 one-dimensional SAH sweeps on the whole set; pick the 2 cheapest axes
 - Use those 2 **global** split thresholds to form a 2×2 grid; assign primitives by centroid
 - Key difference vs A4: the secondary threshold is shared by both halves (not adaptive)
 - Arity: 2 – 4
 
-**Grid8 (global three-axis grid)**
+**Ours8 (global three-axis grid)**
 
 - Same, using all three axes' global optimal thresholds → 2×2×2 = 8 cells
 - Arity: 2 – 8
@@ -392,8 +392,8 @@ Median > 2way SAH ≈ Binned SAH > Binned+SAH ≈ Binned+SAH+Coll ≈ Binned Col
 | Binned+A4 (T=32) | Binned 2-way top; A4 bottom (N≤32) |
 | Binned4+A4 (T=32) | 2-round inline Binned top (~4-way); A4 bottom |
 | Binned4+A8 (T=32) | 2-round inline Binned top (~4-way); A8 bottom |
-| Binned4+Grid4 (T=32) | 2-round inline Binned top (~4-way); Grid4 bottom |
-| Binned4+Grid8 (T=32) | 2-round inline Binned top (~4-way); Grid8 bottom |
+| Binned4+Ours4 (T=32) | 2-round inline Binned top (~4-way); Ours4 bottom |
+| Binned4+Ours8 (T=32) | 2-round inline Binned top (~4-way); Ours8 bottom |
 
 ---
 
@@ -412,13 +412,13 @@ Median > 2way SAH ≈ Binned SAH > Binned+SAH ≈ Binned+SAH+Coll ≈ Binned Col
 | **A8 Independent** | 194.7 | **54.07** | 62028 | 52775 | 6 |
 | B4 Hierarchical | 242.8 | 66.83 | 75079 | 56285 | 9 |
 | **B8 Hierarchical** | 239.6 | **52.88** | 59900 | 51020 | 6 |
-| Grid4 (best 2-axis) | 165.1 | 75.92 | 65856 | 46603 | 10 |
-| Grid8 (best 3-axis) | 120.2 | 55.49 | 64637 | 52997 | 7 |
+| Ours4 (best 2-axis) | 165.1 | 75.92 | 65856 | 46603 | 10 |
+| Ours8 (best 3-axis) | 120.2 | 55.49 | 64637 | 52997 | 7 |
 | Binned+A4 (T=32) | 81.8 | 101.97 | 77925 | 56228 | 15 |
 | Binned4+A4 (T=32) | 82.8 | 68.78 | 75202 | 56228 | 9 |
 | **Binned4+A8 (T=32)** | **80.5** | **66.45** | 61426 | 51561 | 9 |
-| Binned4+Grid4 (T=32) | 69.2 | 76.56 | 66049 | 46533 | 10 |
-| **Binned4+Grid8 (T=32)** | **61.6** | 67.76 | 64299 | 52060 | 10 |
+| Binned4+Ours4 (T=32) | 69.2 | 76.56 | 66049 | 46533 | 10 |
+| **Binned4+Ours8 (T=32)** | **61.6** | 67.76 | 64299 | 52060 | 10 |
 
 #### Triangle (3D) primitives
 
@@ -433,13 +433,13 @@ Median > 2way SAH ≈ Binned SAH > Binned+SAH ≈ Binned+SAH+Coll ≈ Binned Col
 | **A8 Independent** | 191.9 | **49.15** | 62303 | 53024 | 6 |
 | B4 Hierarchical | 237.6 | 61.79 | 74883 | 56144 | 9 |
 | **B8 Hierarchical** | 236.5 | **48.05** | 60169 | 51263 | 6 |
-| Grid4 (best 2-axis) | 166.7 | 69.29 | 66269 | 47016 | 10 |
-| Grid8 (best 3-axis) | 119.8 | 50.81 | 64260 | 52737 | 7 |
+| Ours4 (best 2-axis) | 166.7 | 69.29 | 66269 | 47016 | 10 |
+| Ours8 (best 3-axis) | 119.8 | 50.81 | 64260 | 52737 | 7 |
 | Binned+A4 (T=32) | 78.7 | 96.13 | 78076 | 56337 | 15 |
 | Binned4+A4 (T=32) | 80.5 | 63.64 | 75352 | 56337 | 9 |
 | **Binned4+A8 (T=32)** | **77.5** | **61.49** | 60882 | 51145 | 9 |
-| Binned4+Grid4 (T=32) | 74.4 | 70.27 | 66407 | 46890 | 10 |
-| **Binned4+Grid8 (T=32)** | **67.6** | 62.77 | 63945 | 51884 | 9 |
+| Binned4+Ours4 (T=32) | 74.4 | 70.27 | 66407 | 46890 | 10 |
+| **Binned4+Ours8 (T=32)** | **67.6** | 62.77 | 63945 | 51884 | 9 |
 
 ---
 
@@ -458,13 +458,13 @@ Median > 2way SAH ≈ Binned SAH > Binned+SAH ≈ Binned+SAH+Coll ≈ Binned Col
 | A8 Independent | 272.1 | 17.67 |
 | B4 Hierarchical | 326.5 | 21.55 |
 | **B8 Hierarchical** | 354.9 | **16.49** |
-| Grid4 (best 2-axis) | 219.4 | 24.63 |
-| Grid8 (best 3-axis) | 160.5 | 19.22 |
+| Ours4 (best 2-axis) | 219.4 | 24.63 |
+| Ours8 (best 3-axis) | 160.5 | 19.22 |
 | Binned+A4 (T=32) | 120.0 | 32.88 |
 | Binned4+A4 (T=32) | 128.3 | 22.18 |
 | **Binned4+A8 (T=32)** | **121.6** | **21.60** |
-| Binned4+Grid4 (T=32) | 106.1 | 24.00 |
-| **Binned4+Grid8 (T=32)** | **98.2** | 22.09 |
+| Binned4+Ours4 (T=32) | 106.1 | 24.00 |
+| **Binned4+Ours8 (T=32)** | **98.2** | 22.09 |
 
 #### Chinese Dragon (871,306 triangles)
 
@@ -479,13 +479,13 @@ Median > 2way SAH ≈ Binned SAH > Binned+SAH ≈ Binned+SAH+Coll ≈ Binned Col
 | A8 Independent | 1934.6 | 23.94 |
 | B4 Hierarchical | 2352.9 | 28.75 |
 | **B8 Hierarchical** | 2361.8 | **21.81** |
-| Grid4 (best 2-axis) | 1476.6 | 32.38 |
-| Grid8 (best 3-axis) | 1100.1 | 26.63 |
+| Ours4 (best 2-axis) | 1476.6 | 32.38 |
+| Ours8 (best 3-axis) | 1100.1 | 26.63 |
 | Binned+A4 (T=32) | 764.7 | 45.31 |
 | Binned4+A4 (T=32) | 814.1 | 29.86 |
 | **Binned4+A8 (T=32)** | **789.2** | **28.64** |
-| Binned4+Grid4 (T=32) | 706.8 | 31.52 |
-| **Binned4+Grid8 (T=32)** | **688.5** | 29.60 |
+| Binned4+Ours4 (T=32) | 706.8 | 31.52 |
+| **Binned4+Ours8 (T=32)** | **688.5** | 29.60 |
 
 ---
 
@@ -499,15 +499,150 @@ Median > 2way SAH ≈ Binned SAH > Binned+SAH ≈ Binned+SAH+Coll ≈ Binned Col
 
 4. **Real meshes vs random synthetic**: identical rankings — strategy ordering is robust to mesh type.
 
-5. **Grid4 / Grid8 vs A4 / A8 (global grid vs adaptive splitting)**:
-   - Grid uses global optimal 1D thresholds; secondary cuts are not adapted per subgroup. A4/A8 pick axes independently per group.
-   - On Dragon, Grid4 SAH = 32.4 vs A4 = 29.1 — an ~**11%** gap; Grid8 = 26.6 vs A8 = 23.9, likewise ~**11%**.
-   - Grid is ~30% faster than same-arity A/B (Dragon: Grid4 1477 ms vs A4 2216 ms) since no per-group axis re-sweeps are needed.
-   - Grid8 is faster than Grid4 (1100 ms vs 1477 ms): three-axis cells hold fewer primitives, so recursion is shallower.
+5. **Ours4 / Ours8 vs A4 / A8 (global grid vs adaptive splitting)**:
+   - Ours uses global optimal 1D thresholds; secondary cuts are not adapted per subgroup. A4/A8 pick axes independently per group.
+   - On Dragon, Ours4 SAH = 32.4 vs A4 = 29.1 — an ~**11%** gap; Ours8 = 26.6 vs A8 = 23.9, likewise ~**11%**.
+   - Ours is ~30% faster than same-arity A/B (Dragon: Ours4 1477 ms vs A4 2216 ms) since no per-group axis re-sweeps are needed.
+   - Ours8 is faster than Ours4 (1100 ms vs 1477 ms): three-axis cells hold fewer primitives, so recursion is shallower.
    - Conclusion: global grid splitting is a fast approximation of adaptive splitting with a fixed ~11% SAH penalty — suitable when build speed matters more than quality.
 
-6. **Binned4+Grid hybrids (4-wide Binned top + Grid bottom)**:
-   - **Binned4+Grid8 is the fastest builder of all strategies** (Dragon: 688 ms — ~10% faster even than pure Binned SAH's 760 ms) because the Grid8 bottom needs no per-group re-sweeps.
+6. **Binned4+Ours hybrids (4-wide Binned top + Ours bottom)**:
+   - **Binned4+Ours8 is the fastest builder of all strategies** (Dragon: 688 ms — ~10% faster even than pure Binned SAH's 760 ms) because the Ours8 bottom needs no per-group re-sweeps.
    - SAH is only ~3% worse than Binned4+A8 (Dragon: 29.6 vs 28.6) while ~13% faster.
    - Bunny agrees: 98 ms (fastest overall), SAH=22.1, within ~2% of Binned4+A8's 21.6.
-   - Conclusion: for maximum build speed choose Binned4+Grid8 over Binned4+A8; the SAH gap (2–3%) is negligible.
+   - Conclusion: for maximum build speed choose Binned4+Ours8 over Binned4+A8; the SAH gap (2–3%) is negligible.
+
+---
+
+## Follow-up Experiment: Warm-up Timing and a Sweep of the Threshold T
+
+> The numbers in this section were re-measured **with warm-up** and are therefore not
+> directly comparable to the tables above (which had none).
+
+### Correction to the Timing Method
+
+All earlier timings averaged in the first (cold) build, which made small-N results scatter by
+up to ±30% — e.g. Binned+SAH on 2D circles at N=128 once measured 0.1008 ms and re-measured
+at 0.035 ms. Both programs now perform **untimed warm-up builds** before timing: 2 for
+synthetic scenes, 1 for the large meshes. After the fix, T-independent methods scatter by
+only about **±1.5%** across 4 independent runs (Sweep on Dragon: 2168 / 2112 / 2117 / 2158 ms).
+
+### The Threshold T Is Now a Runtime Parameter
+
+`HYBRID_THRESH` is no longer a compile-time constant; it is set on the command line with
+`--T=<n>`, and the printed strategy names show the actual value:
+
+```
+bvh_compute.exe   --T=256
+bvh3d_compute.exe meshes/dragon/dragon.obj --T=256
+```
+
+### Newly Added Strategies
+
+| Strategy | Dim | Description |
+|---|---|---|
+| Ours4 | 2D | One 1-D SAH sweep per axis, then a single 2×2 grid partition into 4 children |
+| Binned+Ours4 (T) | 2D / 3D | Plain binned 2-way top; switches to Ours4 when N ≤ T (no collapse) |
+| Binned4+Ours4 (T) | 2D / 3D | Two inline binned rounds per top node (≈4-ary); Ours4 at the bottom |
+| Binned+SAH (T) | 3D | Binned 2-way top; exact Sweep when N ≤ T (control group) |
+
+### Re-measured Results (warmed up, T=32)
+
+#### 2D circles, N=102,400
+
+| Strategy | Time (ms) | SAH |
+|---|---|---|
+| 2-way SAH Sweep | 138.4 | 1013.46 |
+| Binned SAH (B=16) | 55.75 | 1018.37 |
+| Ours4 (proposed 4-way) | 112.2 | 722.80 |
+| Binned+Ours4 (T=32) | 47.83 | 825.95 |
+| Binned Collapse k=2 (Fast Quad BVH) | 62.81 | 788.10 |
+| Binned4+Ours4 (T=32) | 51.37 | 727.06 |
+| Binned+SAH (T=32) (control) | 48.07 | 1018.20 |
+
+#### 3D spheres, N=102,400
+
+| Strategy | Time (ms) | SAH |
+|---|---|---|
+| 2-way SAH Sweep | 224.2 | 133.05 |
+| Binned SAH (B=16) | 77.16 | 134.10 |
+| Ours4 (proposed 4-way) | 158.6 | 75.92 |
+| Binned+Ours4 (T=32) | 65.97 | 109.75 |
+| Binned Collapse k=2 (Fast Quad BVH) | 80.85 | 83.05 |
+| Binned4+Ours4 (T=32) | 70.75 | 76.56 |
+| Binned+SAH (T=32) (control) | 67.82 | 134.01 |
+
+#### Stanford Bunny (144,046 triangles)
+
+| Strategy | Time (ms) | SAH |
+|---|---|---|
+| 2-way SAH Sweep | 300.9 | 37.45 |
+| Binned SAH (B=16) | 102.5 | 37.76 |
+| Ours4 (proposed 4-way) | 207.9 | 24.63 |
+| Binned+Ours4 (T=32) | 98.29 | 34.70 |
+| Binned Collapse k=2 (Fast Quad BVH) | 119.8 | 23.44 |
+| Binned4+Ours4 (T=32) | 105.0 | 24.00 |
+| Binned+SAH (T=32) (control) | 97.88 | 37.74 |
+
+#### Chinese Dragon (871,306 triangles)
+
+| Strategy | Time (ms) | SAH |
+|---|---|---|
+| 2-way SAH Sweep | 2168.5 | 49.66 |
+| Binned SAH (B=16) | 695.0 | 50.16 |
+| Ours4 (proposed 4-way) | 1445.4 | 32.38 |
+| Binned+Ours4 (T=32) | 709.8 | 46.96 |
+| Binned Collapse k=2 (Fast Quad BVH) | 773.1 | 30.48 |
+| Binned4+Ours4 (T=32) | 803.8 | 31.52 |
+| Binned+SAH (T=32) (control) | 717.5 | 50.16 |
+
+### T Sweep (time ms / SAH)
+
+#### 2D circles, N=102,400
+
+| Strategy | T=32 | T=64 | T=256 | T=1024 |
+|---|---|---|---|---|
+| Binned+Ours4 | 47.83 / 825.95 | 49.44 / 814.24 | 53.63 / 782.78 | 63.39 / 765.62 |
+| Binned4+Ours4 | 51.37 / 727.06 | 51.49 / 764.77 | 55.19 / 759.88 | 64.63 / 755.03 |
+| Binned+SAH (control) | 48.07 / 1018.20 | 50.02 / 1018.22 | 57.40 / 1016.32 | 68.28 / 1014.55 |
+
+#### 3D spheres, N=102,400
+
+| Strategy | T=32 | T=64 | T=256 | T=1024 |
+|---|---|---|---|---|
+| Binned+Ours4 | 65.97 / 109.75 | 65.81 / 104.53 | 76.06 / 93.68 | 86.95 / 86.69 |
+| Binned4+Ours4 | 70.75 / 76.56 | 68.67 / 83.89 | 78.33 / 81.53 | 91.82 / 79.98 |
+| Binned+SAH (control) | 67.82 / 134.01 | 71.73 / 134.02 | 88.46 / 133.79 | 106.1 / 133.40 |
+
+#### Stanford Bunny
+
+| Strategy | T=32 | T=64 | T=256 | T=1024 |
+|---|---|---|---|---|
+| Binned+Ours4 | 98.29 / 34.70 | 101.5 / 33.69 | 119.5 / 31.70 | 149.1 / 29.78 |
+| Binned4+Ours4 | 105.0 / 24.00 | 108.6 / 24.01 | 117.3 / 24.23 | 132.5 / 24.35 |
+| Binned+SAH (control) | 97.88 / 37.74 | 101.0 / 37.73 | 125.2 / 37.66 | 156.9 / 37.55 |
+
+#### Chinese Dragon
+
+| Strategy | T=32 | T=64 | T=256 | T=1024 |
+|---|---|---|---|---|
+| Binned+Ours4 | 709.8 / 46.96 | 676.0 / 45.76 | 733.8 / 43.31 | 822.1 / 40.89 |
+| Binned4+Ours4 | 803.8 / 31.52 | 712.9 / 31.71 | 756.8 / 32.07 | 880.3 / 32.35 |
+| Binned+SAH (control) | 717.5 / 50.16 | 677.2 / 50.15 | 782.4 / 50.11 | 946.5 / 50.01 |
+
+### Conclusions from the T Sweep
+
+1. **Binned+Ours4: T is a clean quality/speed knob.** Raising T lowers SAH and raises build
+   time, both monotonically (Dragon: 47.0 → 40.9, −13%; 710 → 822 ms, +16%). Even at T=1024,
+   however, its SAH does not reach what Binned4+Ours4 already achieves at T=32.
+2. **Binned4+Ours4: T=32 is already optimal; larger T is slightly worse** (Dragon: 31.5 → 32.4).
+   The SAH gain comes mainly from merging intermediate nodes at the top, and a larger T means
+   less of that merging — so there is no reason to tune T for this method.
+3. **Binned+SAH (control): SAH is essentially insensitive to T** (Dragon: 50.16 → 50.01, a
+   0.3% spread across four values of T). This confirms that switching the bottom to a more
+   precise **binary** method yields nothing; the gain comes only from switching it to a
+   **4-way** split.
+4. **An anomaly still to be explained**: pure Ours4 over the whole tree (Dragon SAH 32.38)
+   beats Binned4+Ours4 at every T, yet Binned4+Ours4 is better at T=32 (most Binned4 on top)
+   than at T=1024 (least). This non-monotonicity has no reliable explanation yet and should be
+   understood before it goes into the paper.
