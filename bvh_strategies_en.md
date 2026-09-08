@@ -672,8 +672,15 @@ bvh3d_compute.exe meshes/dragon/dragon.obj --T=256
    3D spheres at T=32: 63.3 ms / 67.76 against 79.3 ms / 83.05.
    It is so far the only scheme that dominates the established method on both metrics.
 
-7. **An anomaly still to be explained**: pure Ours4 over the whole tree (Dragon SAH 32.38)
-   beats Binned4+Ours4 at every T, yet Binned4+Ours4 is better at T=32 (most Binned4 on top)
-   than at T=1024 (least). This non-monotonicity has no reliable explanation yet and should be
-   understood before it goes into the paper. Note that Binned4+Ours8 does not show it — its
-   dependence on T is monotone.
+7. **The opposite responses of 4 and 6 to T have one explanation.** Raising T shrinks the
+   binned top and enlarges the part of the tree built by the proposed rule, so the hybrid's SAH
+   moves monotonically toward that of the corresponding *pure* method. Which direction depends
+   only on whether the pure method beats the binned top:
+   - On Dragon, pure Ours4 = 32.38, **worse** than the binned top, so Binned4+Ours4 degrades
+     from 31.52 (T=32) toward 32.35 (T=1024), approaching 32.38.
+   - Pure Ours8 = 26.63, **better** than the binned top, so Binned4+Ours8 improves from 29.60
+     toward 28.55, likewise approaching 26.63.
+
+   Both curves are monotone and both converge on their pure method's value, exactly as the
+   mechanism predicts. Practical reading: confine the four-way rule to small nodes (small T),
+   and give the eight-way rule as much of the tree as the build budget allows (large T).
