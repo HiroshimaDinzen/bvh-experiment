@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <array>
 #include <cassert>
+#include <cmath>
 #include <chrono>
 #include <cstdio>
 #include <functional>
@@ -650,12 +651,16 @@ std::string nodes_to_json(const std::vector<Node>& nodes){
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 int main(int argc, char* argv[]){
-    // --T=<n> : hybrid switch threshold (default 32);  first non-flag arg = OBJ mesh
+    // --T=<n>    : hybrid switch threshold (default 32)
+    // --runs=<n> : override the timed-run count (default: adaptive by N)
+    // first non-flag arg = OBJ mesh
     const char* mesh_path=nullptr;
+    int runs_override=0;
     for(int i=1;i<argc;i++){
         std::string a=argv[i];
-        if(a.rfind("--T=",0)==0) HYBRID_THRESH=std::max(1,atoi(a.c_str()+4));
-        else if(!mesh_path)      mesh_path=argv[i];
+        if     (a.rfind("--T=",0)==0)    HYBRID_THRESH=std::max(1,atoi(a.c_str()+4));
+        else if(a.rfind("--runs=",0)==0) runs_override=std::max(1,atoi(a.c_str()+7));
+        else if(!mesh_path)              mesh_path=argv[i];
     }
     fprintf(stderr,"HYBRID_THRESH (T) = %d\n",HYBRID_THRESH);
 
@@ -704,7 +709,7 @@ int main(int argc, char* argv[]){
         int N=(int)base.size();
         std::string mname=mesh_name(mesh_path);
         // adaptive runs: fewer for large meshes (slow strategies)
-        int RUNS   = N<200000?5 : N<600000?3 : 1;
+        int RUNS   = runs_override ? runs_override : (N<200000?5 : N<600000?3 : 1);
         int WARMUP = N<200000?2 : 1;
         fprintf(stderr,"\n=== OBJ mesh: %s  N=%d  runs=%d ===\n",
                 mname.c_str(),N,RUNS);
@@ -713,7 +718,8 @@ int main(int argc, char* argv[]){
             <<",\"strategies\":[";
         bool first=true;
         for(auto& st:strats){
-            double dt=0.0;
+            std::vector<double> samples;
+            samples.reserve(RUNS);
             std::vector<Node> nodes;
             for(int w=0;w<WARMUP;w++){          // untimed warm-up builds
                 nodes.clear(); nodes.reserve(N*4);
@@ -724,14 +730,17 @@ int main(int argc, char* argv[]){
                 auto t0=std::chrono::high_resolution_clock::now();
                 st.fn(nodes,base,0);
                 auto t1=std::chrono::high_resolution_clock::now();
-                dt+=std::chrono::duration<double,std::milli>(t1-t0).count();
+                samples.push_back(std::chrono::duration<double,std::milli>(t1-t0).count());
             }
-            dt/=RUNS;
+            double dt=0.0; for(double v:samples) dt+=v; dt/=RUNS;
+            double var=0.0; for(double v:samples) var+=(v-dt)*(v-dt);
+            double sd  = RUNS>1 ? std::sqrt(var/(RUNS-1)) : 0.0;   // sample SD
+            double tmin= *std::min_element(samples.begin(),samples.end());
             double cost=sah_cost(nodes);
             auto s=tree_stats(nodes);
             assert(s.prim_count==N);
-            fprintf(stderr,"  [%-22s]  time=%9.2f ms  SAH=%9.4f  nodes=%7d  leaves=%7d  maxdepth=%d\n",
-                    st.name.c_str(),dt,cost,s.nodes,s.leaves,s.max_depth);
+            fprintf(stderr,"  [%-22s]  time=%9.2f ms  sd=%7.2f  min=%9.2f  SAH=%9.4f  nodes=%7d  leaves=%7d  maxdepth=%d\n",
+                    st.name.c_str(),dt,sd,tmin,cost,s.nodes,s.leaves,s.max_depth);
             if(!first) json<<",";
             first=false;
             json<<"{\"name\":\""<<st.name<<"\""
