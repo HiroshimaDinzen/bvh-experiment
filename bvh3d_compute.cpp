@@ -20,7 +20,7 @@
 
 static const float C_TRAV        = 1.0f;
 static const float C_ISECT       = 1.0f;
-static const int   MAX_LEAF      = 4;
+static int         MAX_LEAF      = 4;    // runtime-settable via --leaf=<n>
 static int         HYBRID_THRESH = 32;   // runtime-settable via --T=<n>
 
 // ─── AABB 3-D ─────────────────────────────────────────────────────────────────
@@ -131,7 +131,9 @@ DepthStats depth_stats(const std::vector<Node>& nodes){
         sw+=d*w; wsum+=w;
         int np=(int)n.prims.size();
         sp+=d*(double)np; psum+=(double)np;
-        h[np<1?1:(np>4?4:np)]++;      // leaf occupancy, clamped to [1, MAX_LEAF]
+        // buckets: 1, 2, 3-4, 5-8, 9+  (fixed, so runs at different MAX_LEAF compare)
+        int b = np<=1?0 : np==2?1 : np<=4?2 : np<=8?3 : 4;
+        h[b]++;
     }
     DepthStats r{ nl?sd/nl:0.0, wsum>0?sw/wsum:0.0, psum>0?sp/psum:0.0, {0,0,0,0,0} };
     for(int i=0;i<5;i++) r.hist[i]=h[i];
@@ -820,6 +822,7 @@ int main(int argc, char* argv[]){
         std::string a=argv[i];
         if     (a.rfind("--T=",0)==0)    HYBRID_THRESH=std::max(1,atoi(a.c_str()+4));
         else if(a.rfind("--runs=",0)==0) runs_override=std::max(1,atoi(a.c_str()+7));
+        else if(a.rfind("--leaf=",0)==0) MAX_LEAF=std::max(1,atoi(a.c_str()+7));
         else if(!mesh_path)              mesh_path=argv[i];
     }
     fprintf(stderr,"HYBRID_THRESH (T) = %d\n",HYBRID_THRESH);
@@ -913,11 +916,12 @@ int main(int argc, char* argv[]){
             if(inner) avg_arity/=inner;
             double c_simd4=sah_cost_simd(nodes,4), c_simd8=sah_cost_simd(nodes,8);
             DepthStats ds=depth_stats(nodes);
-            int tl=ds.hist[1]+ds.hist[2]+ds.hist[3]+ds.hist[4]; if(!tl) tl=1;
-            fprintf(stderr,"  [%-22s] SIMD8=%8.3f  meanD=%5.2f  inner=%7d  leaves=%7d  p/leaf=%.2f  leaf1=%4.1f%% leaf2=%4.1f%% leaf3=%4.1f%% leaf4=%4.1f%%  avgK=%.2f\n",
-                    st.name.c_str(),c_simd8,ds.mean_leaf,inner,s.leaves,
+            int tl=0; for(int i=0;i<5;i++) tl+=ds.hist[i]; if(!tl) tl=1;
+            fprintf(stderr,"  [%-22s] t=%7.1f  SIMD8=%8.3f  meanD=%5.2f  inner=%7d  leaves=%7d  p/leaf=%5.2f  L1=%4.1f%% L2=%4.1f%% L34=%4.1f%% L58=%4.1f%% L9p=%4.1f%%  avgK=%.2f\n",
+                    st.name.c_str(),dt,c_simd8,ds.mean_leaf,inner,s.leaves,
                     (double)N/(double)(s.leaves?s.leaves:1),
-                    100.0*ds.hist[1]/tl,100.0*ds.hist[2]/tl,100.0*ds.hist[3]/tl,100.0*ds.hist[4]/tl,
+                    100.0*ds.hist[0]/tl,100.0*ds.hist[1]/tl,100.0*ds.hist[2]/tl,
+                    100.0*ds.hist[3]/tl,100.0*ds.hist[4]/tl,
                     avg_arity);
             if(!first) json<<",";
             first=false;
