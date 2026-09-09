@@ -24,11 +24,45 @@ for 4-ary, `R = 3` for 8-ary.
 
 ### The claim (at **matched arity** and a **stated SIMD width**)
 
-The hybrids (`Binned8+Ours8`, `Binned4+Ours4`) build **faster** than the
-corresponding collapse baseline, with SAH **better in 2D (4.6–10 %)** and
-**roughly equal in 3D (−0.8 % to +2.2 %)**.
+**Building a wide BVH directly, with no intermediate binary tree, is a
+build-time / quality trade — not a quality win.** With each builder at its
+own optimal leaf size, `Binned8+Ours8` **gives up 4–14 % SAH and builds
+5–31 % faster** than the equivalent collapse baseline.
 
-Build-time evidence, stated by strength:
+It is also **markedly less sensitive to the leaf-size parameter**: over
+`MAX_LEAF` 1→16 its SAH moves +46 % and its build time −35 %, against
++117 % and −54 % for collapse.
+
+**The proposal does not have lower SAH cost.** Swept over `C_trav:C_isect`
+of 1:8 … 4:1 and `MAX_LEAF` of 1…16, on both meshes, collapse wins on SAH at
+every tuned configuration. See "Re-measurement at Matched Arity" below.
+
+Both meshes, each method at its own optimum (`MAX_LEAF = 1`):
+
+| `C_trav` | Dragon ΔSAH / Δbuild | Bunny ΔSAH / Δbuild |
+|---|---|---|
+| 0.125 | +6.2 % / **−24.8 %** | +7.5 % / **−31.0 %** |
+| 0.5 | — | +14.1 % / −31.1 % |
+| 1 | +8.8 % / −24.2 % | +9.9 % / −29.4 % |
+| 2 | — | +8.3 % / −21.3 % |
+| 4 | +3.9 % / −7.2 % | +6.2 % / −4.7 % |
+
+Positive ΔSAH means the proposal is worse. The trade is best where traversal
+is cheap relative to intersection and worst where it is expensive.
+
+**Why the build-time advantage is largest where quality wants small leaves:**
+collapse must materialise the whole binary tree before merging levels away,
+so the deeper that tree, the more levels `Ours` skips by splitting 8 ways
+directly.
+
+> **Superseded reading**: this document previously reported SAH as roughly
+> level in 3D (−0.8 % to +2.2 %). That was measured at `MAX_LEAF = 4`, which
+> the sweep later showed sits almost exactly on the crossover where the sign
+> flips. **A coincidence of an arbitrary parameter, not a property of the
+> method.** At the optimal leaf size the gap is a consistent 4–14 % in
+> collapse's favour.
+
+Build-time evidence, stated by strength (measured at `MAX_LEAF = 4`):
 
 - **3D: solid.** −15.2 % on both meshes. Dragon 630.1 ± 7.5 vs 742.8 ± 7.3 ms
   (10.7 SD apart); Bunny 92.2 ± 1.9 vs 108.7 ± 1.0 ms (7.7 SD).
@@ -94,8 +128,12 @@ still asserting 40–60 % is superseded.
 - **The finished tree is larger**: 26 % more nodes in 2D, 47 % in 3D. Peak
   memory *during* construction is roughly 40 % lower (no intermediate binary
   tree is materialised), but the resulting tree costs more to store.
-- **2D and 3D disagree on the SAH direction** (2D consistently better, 3D
-  roughly level). This is currently unexplained.
+- **The 2D results have not been re-swept.** 2D still reports SAH better by
+  4.6–10 % at `MAX_LEAF = 4`, the exact value the 3D sweep showed to be a
+  crossover artifact. Until 2D is swept the same way, **treat the 2D SAH
+  advantage as unconfirmed**.
+- **Only two meshes.** Bunny and Dragon agree on the sweeps, but two meshes
+  is not a survey.
 
 ---
 
@@ -141,8 +179,8 @@ advantage on 4-wide hardware.**
 
 | Parameter | Value |
 |---|---|
-| `C_TRAV`, `C_ISECT` | 1.0, 1.0 |
-| `MAX_LEAF` | 4 primitives |
+| `C_TRAV`, `C_ISECT` | 1.0, 1.0 default; `C_TRAV` settable with `--ctrav=<f>` |
+| `MAX_LEAF` | 4 default; settable with `--leaf=<n>` |
 | Bin count `B` | 16 |
 | Hybrid threshold `T` | 32 (runtime-settable with `--T=<n>`) |
 | Area proxy | half-perimeter (2D) / half surface area (3D) |

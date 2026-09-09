@@ -10,24 +10,54 @@ construction instead of building a binary tree and collapsing it afterwards.
 
 ### The claim
 
-At **matched arity and a stated SIMD width**, a hybrid of an inline-widened
-binned top and a multi-axis grid-partitioned bottom (`Binned8+Ours8`,
-`Binned4+Ours4`) builds **faster** than the equivalent collapse-based
-baseline, with SAH cost **better in 2D (4.6–10 %)** and **roughly equal in
-3D (−0.8 % to +2.2 %)**.
+Building a wide BVH **directly**, with no intermediate binary tree, is a
+**build-time / quality trade — not a quality win**. At matched arity, a
+stated SIMD width, and each builder at *its own* optimal leaf size,
+`Binned8+Ours8` gives up **4–14 % SAH** and builds **5–31 % faster** than
+the equivalent collapse baseline.
 
-Build-time evidence, stated by strength:
+It is also **markedly less sensitive to the leaf-size parameter**: over
+`MAX_LEAF` 1→16 its SAH moves +46 % and its build time −35 %, against
++117 % and −54 % for collapse.
 
-- **3D: solid.** −15.2 % on both meshes. Dragon 630.1 ± 7.5 vs 742.8 ± 7.3 ms
-  (10.7 SD apart); Bunny 92.2 ± 1.9 vs 108.7 ± 1.0 ms (7.7 SD).
-- **2D: directionally consistent but noisy.** All four configurations favour
-  the proposal (−14.8 % to −23.0 %), but two of them separate by only
-  ~1.5–1.7 SD. Run-to-run variation between invocations of the same binary
-  reached 7 %, which is larger than some of the effects being claimed. The 2D
-  build-time advantage should be treated as suggestive, not established.
+**The proposal does not have lower SAH cost.** Swept over `C_trav:C_isect`
+of 1:8 … 4:1 and `MAX_LEAF` of 1…16, on two meshes, collapse wins on SAH at
+every tuned configuration. See "Parameter sweeps" below — this was tested
+hard and the answer did not change.
 
-SAH figures are deterministic and reproduced bit-for-bit across runs; only
-the timing carries this uncertainty.
+Both meshes, each method at its own optimum (`MAX_LEAF = 1`):
+
+| `C_trav` | Dragon ΔSAH / Δbuild | Bunny ΔSAH / Δbuild |
+|---|---|---|
+| 0.125 | +6.2 % / **−24.8 %** | +7.5 % / **−31.0 %** |
+| 0.5 | — | +14.1 % / −31.1 % |
+| 1 | +8.8 % / −24.2 % | +9.9 % / −29.4 % |
+| 2 | — | +8.3 % / −21.3 % |
+| 4 | +3.9 % / −7.2 % | +6.2 % / −4.7 % |
+
+Positive ΔSAH means the proposal is worse. The trade is best where traversal
+is cheap relative to intersection and worst where it is expensive — at
+`C_trav = 4` the build-time advantage nearly vanishes.
+
+**Why the build-time advantage is largest where quality wants small leaves:**
+collapse must materialise the entire binary tree before merging levels away,
+so the deeper that tree, the more levels `Ours` skips by splitting 8 ways
+directly.
+
+Evidence quality: SAH figures are deterministic and reproduce bit-for-bit.
+3D build times are solid (Dragon 10.7 SD, Bunny 7.7 SD at `MAX_LEAF = 4`).
+2D build times are directionally consistent across all four configurations
+but two separate by only ~1.5–1.7 SD, and run-to-run drift between
+invocations of the same binary reached 7 % — treat 2D timing as suggestive,
+not established.
+
+### Superseded: the earlier "SAH roughly equal in 3D" reading
+
+A previous version of this file reported SAH as roughly level in 3D (−0.8 %
+to +2.2 %). That was measured at `MAX_LEAF = 4`, which the sweep later showed
+sits almost exactly on the crossover point where the sign flips. It was a
+coincidence of an arbitrary parameter, not a property of the method. At the
+SAH-optimal leaf size the gap is a consistent 4–14 % in collapse's favour.
 
 ### Scope: the proposal only pays off at the bottom of a hybrid
 
@@ -84,8 +114,12 @@ reduction is superseded by this file.
 - **The finished tree is larger**: 26 % more nodes in 2D, 47 % in 3D. Peak
   memory *during* construction is roughly 40 % lower (no intermediate binary
   tree is materialised), but the resulting tree costs more memory to store.
-- **2D and 3D disagree on SAH** (2D consistently better, 3D roughly level).
-  This difference is not currently explained.
+- **The 2D results have not been re-swept.** 2D still reports SAH better by
+  4.6–10 % at `MAX_LEAF = 4`, but that is the exact parameter value the 3D
+  sweep showed to be a crossover artifact. Until 2D is swept over `MAX_LEAF`
+  and `C_trav` the same way, treat the 2D SAH advantage as unconfirmed.
+- **Only two meshes.** Bunny and Dragon. They agree on the sweep results,
+  but two meshes is not a survey.
 
 ---
 
@@ -132,8 +166,8 @@ on 4-wide hardware.**
 
 | Parameter | Value |
 |---|---|
-| `C_TRAV`, `C_ISECT` | 1.0, 1.0 |
-| `MAX_LEAF` | 4 primitives |
+| `C_TRAV`, `C_ISECT` | 1.0, 1.0 default; `C_TRAV` settable with `--ctrav=<f>` |
+| `MAX_LEAF` | 4 default; settable with `--leaf=<n>` |
 | Bin count `B` | 16 |
 | Hybrid threshold `T` | 32 (runtime-settable with `--T=<n>`) |
 | Area proxy | half-perimeter (2D); half surface area (3D) |
@@ -229,6 +263,47 @@ reproducible, while two of the four timing differences are within ~1.7 SD.
 
 ---
 
+## Parameter sweeps
+
+Two parameters that had been fixed by convention turned out to control the
+verdict, so both were swept. `C_ISECT` is held at 1; `C_trav` is the ratio.
+
+### `MAX_LEAF`, at `C_trav = 1` (SAH at `W = 8`, Ours vs collapse)
+
+| `MAX_LEAF` | Dragon ΔSAH / Δbuild | Bunny ΔSAH / Δbuild |
+|---|---|---|
+| 1 | +8.8 % / −22.8 % | +9.9 % / −29.0 % |
+| 2 | +8.5 % / −24.1 % | +9.6 % / −25.1 % |
+| 4 | +2.2 % / −15.3 % | −0.8 % / −14.0 % |
+| 8 | −7.1 % / −7.8 % | −6.4 % / −10.3 % |
+| 16 | −26.5 % / +10.3 % | −30.0 % / +13.3 % |
+
+The SAH gap is monotone in `MAX_LEAF` and changes sign near 4. **`MAX_LEAF`
+must not be raised to make the proposal look better**: doing so degrades both
+trees in absolute terms (Dragon collapse 23.811 → 46.562) and the proposal
+only "wins" because collapse degrades faster. Collapse inherits the binary
+tree's leaves and fills to the cap (11.22 primitives per leaf at 16); Ours
+self-regulates through its own SAH termination (4.76).
+
+### `C_trav` × `MAX_LEAF` on Bunny (ΔSAH, positive = proposal worse)
+
+| `C_trav` \ `MAX_LEAF` | 1 | 2 | 4 | 8 | 16 |
+|---|---|---|---|---|---|
+| 0.125 | **+7.5** | −3.7 | −16.9 | −17.0 | −41.6 |
+| 0.5 | **+14.1** | +5.1 | −7.5 | −11.4 | −36.0 |
+| 1 | **+9.9** | +9.6 | −0.8 | −6.4 | −30.0 |
+| 2 | **+8.3** | +8.3 | +6.5 | −0.4 | −21.3 |
+| 4 | **+6.2** | +6.2 | +6.2 | +5.4 | −11.0 |
+
+Bold is each row's optimal leaf size for both builders, which is 1 at every
+ratio tested. Every cell where the proposal wins lies at a leaf size that is
+suboptimal for both.
+
+At `C_trav = 4` the SAH termination criterion fires before the leaf cap is
+reached, so `MAX_LEAF` 1/2/4 give identical trees and the parameter stops
+mattering at all — and collapse still wins by 6.2 %. **The leaf cap cannot
+explain the gap.**
+
 ## Files
 
 | File | Contents |
@@ -261,9 +336,14 @@ bvh_compute.exe --T=32
 
 ## Open problems
 
-1. **Measure real ray traversal time.** SAH is a proxy; a 2 % SAH difference
-   should not be argued from the model alone.
-2. **Explain the 2D/3D discrepancy** in SAH direction.
+1. **Measure real ray traversal time.** SAH is a proxy for node visits and
+   primitive tests; measuring those directly tests the model instead of
+   assuming it. Note the finished tree carries 26–47 % more nodes, which SAH
+   discounts (they sit in small boxes) but cache pressure does not — expect
+   measured traversal to be worse than SAH predicts.
+2. **Explain the 2D/3D discrepancy** in SAH direction. Note the 3D side of
+   that comparison was measured at `MAX_LEAF = 4`; re-check it at the swept
+   optimum before treating the discrepancy as real.
 3. **Make the split decision match the structure built.** Thresholds are
    currently chosen by per-axis *binary* SAH, but a 4-way or 8-way node is
    then built; the cost of that wide split is never evaluated against the
