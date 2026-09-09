@@ -22,6 +22,9 @@ static float       C_TRAV        = 1.0f;  // runtime-settable via --ctrav=<f>
 static const float C_ISECT       = 1.0f;
 static int         MAX_LEAF      = 4;    // runtime-settable via --leaf=<n>
 static int         HYBRID_THRESH = 32;   // runtime-settable via --T=<n>
+static int         BUILD_W       = 8;    // SIMD width used INSIDE the split
+                                         // decision, --bw=<n>. Separate from the
+                                         // width the finished tree is scored at.
 
 // ─── AABB 3-D ─────────────────────────────────────────────────────────────────
 struct AABB {
@@ -460,6 +463,59 @@ int build_ours8(std::vector<Node>& ns,const Prims& ps,int d){
     return idx;
 }
 
+// ─── Ours-adaptive: judge the split with the SAME model used to score it ─────
+// build_ours4/8 pick per-axis thresholds by *binary* SAH and then commit to a
+// 4- or 8-way node whose own cost is never evaluated - the criterion does not
+// match the structure built. Here each widening step is priced with
+//   C_trav * ceil(k/W) + C_isect * sum_i A(C_i) N(C_i) / A(P)
+// which is exactly sah_cost_simd's per-node term, and the cheapest of
+// {leaf, 2-way, 4-way, 8-way} wins. Arity therefore falls out of the data.
+//
+// Note W >= 8 makes ceil(k/W) == 1 for every k <= 8, so the traversal terms
+// cancel and the widest option always wins on the sum alone: at BUILD_W=8 this
+// should reproduce build_ours8. The decision only bites for BUILD_W < 8.
+static float wide_cost(const std::vector<Prims>& cells, float invA, int W){
+    float sum=0.f; int k=0;
+    for(auto& c:cells){ if(c.empty()) continue; sum+=union_box(c).hsa()*(float)c.size(); k++; }
+    if(k<=1) return 1e30f;
+    return C_TRAV*(float)((k+W-1)/W) + C_ISECT*invA*sum;
+}
+
+int build_ours_adaptive(std::vector<Node>& ns,const Prims& ps,int d){
+    int idx=new_node(ns,ps,d); int n=(int)ps.size();
+    if(n<=MAX_LEAF){make_leaf(ns,idx,ps);return idx;}
+    float pa=ns[idx].box.hsa();
+    float inv=pa>1e-9f?1.f/pa:0.f;
+
+    Split sr[3]; float costs[3]={1e30f,1e30f,1e30f};
+    for(int ax=0;ax<3;ax++){ sr[ax]=best_1d(ps,ax); if(sr[ax].s>=0) costs[ax]=sr[ax].cost; }
+    int ord[3]={0,1,2};
+    std::sort(ord,ord+3,[&](int a,int b){return costs[a]<costs[b];});
+    if(sr[ord[0]].s<0){make_leaf(ns,idx,ps);return idx;}
+
+    std::vector<Prims> cells; cells.push_back(ps);
+    float best_cost=C_ISECT*(float)n;      // the leaf alternative
+    std::vector<Prims> best_cells;         // stays empty => make a leaf
+    for(int i=0;i<3;i++){
+        int ax=ord[i];
+        if(sr[ax].s<0) break;              // axis had no valid split; stop widening
+        float t=split_thresh(sr[ax],ax);
+        std::vector<Prims> nxt;
+        for(auto& c:cells){
+            Prims lo,hi;
+            for(auto& p:c) (p.box.centroid(ax)>=t?hi:lo).push_back(p);
+            if(!lo.empty()) nxt.push_back(std::move(lo));
+            if(!hi.empty()) nxt.push_back(std::move(hi));
+        }
+        cells.swap(nxt);
+        float c=wide_cost(cells,inv,BUILD_W);
+        if(c<best_cost){ best_cost=c; best_cells=cells; }
+    }
+    if(best_cells.size()<=1){make_leaf(ns,idx,ps);return idx;}
+    for(auto& g:best_cells) ns[idx].children.push_back(build_ours_adaptive(ns,g,d+1));
+    return idx;
+}
+
 // ─── Hybrid helpers (3-axis version) ─────────────────────────────────────────
 static bool binned_split_2way(const Prims& ps, float pa, int n_bins, Prims& lp, Prims& rp){
     int n=(int)ps.size();
@@ -637,6 +693,20 @@ static void inline_binned_more(std::vector<Prims>& groups,int extra_rounds){
         }
         groups.swap(nxt);
     }
+}
+
+int build_hybrid_binnedN_oursad(std::vector<Node>& ns,const Prims& ps,int d,int R){
+    if((int)ps.size()<=HYBRID_THRESH) return build_ours_adaptive(ns,ps,d);
+    int idx=new_node(ns,ps,d);
+    float pa=ns[idx].box.hsa();
+    Prims lp,rp;
+    if(!binned_split_2way(ps,pa,16,lp,rp)){make_leaf(ns,idx,ps);return idx;}
+    std::vector<Prims> groups;
+    groups.push_back(std::move(lp));
+    groups.push_back(std::move(rp));
+    inline_binned_more(groups,R-1);
+    for(auto& g:groups) ns[idx].children.push_back(build_hybrid_binnedN_oursad(ns,g,d+1,R));
+    return idx;
 }
 
 int build_hybrid_binnedN_ours8(std::vector<Node>& ns,const Prims& ps,int d,int R){
@@ -824,6 +894,7 @@ int main(int argc, char* argv[]){
         else if(a.rfind("--runs=",0)==0) runs_override=std::max(1,atoi(a.c_str()+7));
         else if(a.rfind("--leaf=",0)==0) MAX_LEAF=std::max(1,atoi(a.c_str()+7));
         else if(a.rfind("--ctrav=",0)==0) C_TRAV=(float)atof(a.c_str()+8);
+        else if(a.rfind("--bw=",0)==0)   BUILD_W=std::max(1,atoi(a.c_str()+5));
         else if(!mesh_path)              mesh_path=argv[i];
     }
     fprintf(stderr,"HYBRID_THRESH (T) = %d\n",HYBRID_THRESH);
@@ -863,6 +934,8 @@ int main(int argc, char* argv[]){
         {"Binned4 inline (pure)",[](auto& ns,auto& ps,int d){return build_binnedN_inline(ns,ps,d,2);}},
         {"Binned8 inline (pure)",[](auto& ns,auto& ps,int d){return build_binnedN_inline(ns,ps,d,3);}},
         {"Binned8+Ours8 (T=32)",[](auto& ns,auto& ps,int d){return build_hybrid_binnedN_ours8(ns,ps,d,3);}},
+        {"Ours-adapt (bw)",     [](auto& ns,auto& ps,int d){return build_ours_adaptive(ns,ps,d);}},
+        {"Binned8+OursAd (T=32)",[](auto& ns,auto& ps,int d){return build_hybrid_binnedN_oursad(ns,ps,d,3);}},
     };
     // reflect the actual threshold in the printed strategy names
     for(auto& st:strats){
@@ -916,10 +989,11 @@ int main(int argc, char* argv[]){
             }
             if(inner) avg_arity/=inner;
             double c_simd4=sah_cost_simd(nodes,4), c_simd8=sah_cost_simd(nodes,8);
+            double c_simdbw=sah_cost_simd(nodes,BUILD_W);
             DepthStats ds=depth_stats(nodes);
             int tl=0; for(int i=0;i<5;i++) tl+=ds.hist[i]; if(!tl) tl=1;
-            fprintf(stderr,"  [%-22s] t=%7.1f  SIMD8=%8.3f  meanD=%5.2f  inner=%7d  leaves=%7d  p/leaf=%5.2f  L1=%4.1f%% L2=%4.1f%% L34=%4.1f%% L58=%4.1f%% L9p=%4.1f%%  avgK=%.2f\n",
-                    st.name.c_str(),dt,c_simd8,ds.mean_leaf,inner,s.leaves,
+            fprintf(stderr,"  [%-22s] t=%7.1f  SIMD8=%8.3f  SIMDbw=%8.3f  meanD=%5.2f  inner=%7d  leaves=%7d  p/leaf=%5.2f  L1=%4.1f%% L2=%4.1f%% L34=%4.1f%% L58=%4.1f%% L9p=%4.1f%%  avgK=%.2f\n",
+                    st.name.c_str(),dt,c_simd8,c_simdbw,ds.mean_leaf,inner,s.leaves,
                     (double)N/(double)(s.leaves?s.leaves:1),
                     100.0*ds.hist[0]/tl,100.0*ds.hist[1]/tl,100.0*ds.hist[2]/tl,
                     100.0*ds.hist[3]/tl,100.0*ds.hist[4]/tl,
