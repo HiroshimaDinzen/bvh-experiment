@@ -18,7 +18,7 @@
 #include <vector>
 #include <iostream>
 
-static const float C_TRAV        = 1.0f;
+static float       C_TRAV        = 1.0f;  // runtime-settable via --ctrav=<f>
 static const float C_ISECT       = 1.0f;
 static int         MAX_LEAF      = 4;    // runtime-settable via --leaf=<n>
 static int         HYBRID_THRESH = 32;   // runtime-settable via --T=<n>
@@ -823,6 +823,7 @@ int main(int argc, char* argv[]){
         if     (a.rfind("--T=",0)==0)    HYBRID_THRESH=std::max(1,atoi(a.c_str()+4));
         else if(a.rfind("--runs=",0)==0) runs_override=std::max(1,atoi(a.c_str()+7));
         else if(a.rfind("--leaf=",0)==0) MAX_LEAF=std::max(1,atoi(a.c_str()+7));
+        else if(a.rfind("--ctrav=",0)==0) C_TRAV=(float)atof(a.c_str()+8);
         else if(!mesh_path)              mesh_path=argv[i];
     }
     fprintf(stderr,"HYBRID_THRESH (T) = %d\n",HYBRID_THRESH);
