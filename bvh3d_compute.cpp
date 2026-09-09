@@ -111,6 +111,30 @@ double sah_cost_simd(const std::vector<Node>& nodes, int W){
     return c;
 }
 
+// Depth statistics beyond the worst case. max_depth alone favours structurally
+// balanced trees (collapse merges levels uniformly); a grid partition can have
+// uneven cells and a worse max depth while most of the tree stays shallow.
+// area_w is the leaf depth weighted by M(leaf)/M(root), i.e. weighted by the
+// chance a random ray reaches that leaf - closer to what traversal feels than
+// an unweighted mean. Note SAH already accounts for depth implicitly, so these
+// explain tree shape; they do not override the SAH comparison.
+struct DepthStats { double mean_leaf, area_w, prim_w; };
+DepthStats depth_stats(const std::vector<Node>& nodes){
+    float ra=nodes[0].box.hsa();
+    double sd=0.0, sw=0.0, wsum=0.0, sp=0.0, psum=0.0;
+    int nl=0;
+    for(auto& n:nodes){
+        if(!n.is_leaf()) continue;
+        double d=(double)n.depth;
+        sd+=d; nl++;
+        double w = ra>1e-9f ? (double)(n.box.hsa()/ra) : 0.0;
+        sw+=d*w; wsum+=w;
+        double p=(double)n.prims.size();
+        sp+=d*p; psum+=p;
+    }
+    return { nl?sd/nl:0.0, wsum>0?sw/wsum:0.0, psum>0?sp/psum:0.0 };
+}
+
 struct Stats { int nodes,leaves,max_depth,prim_count; };
 Stats tree_stats(const std::vector<Node>& nodes){
     Stats s{0,0,0,0};
@@ -885,8 +909,9 @@ int main(int argc, char* argv[]){
             }
             if(inner) avg_arity/=inner;
             double c_simd4=sah_cost_simd(nodes,4), c_simd8=sah_cost_simd(nodes,8);
-            fprintf(stderr,"  [%-22s] t=%8.1f+-%6.1f  SIMD4=%8.3f  SIMD8=%8.3f  inner=%7d  avgK=%.2f  maxK=%d\n",
-                    st.name.c_str(),dt,sd,c_simd4,c_simd8,inner,avg_arity,max_arity);
+            DepthStats ds=depth_stats(nodes);
+            fprintf(stderr,"  [%-22s] t=%8.1f+-%6.1f  SIMD8=%8.3f  maxD=%3d  meanD=%5.2f  areaD=%5.2f  primD=%5.2f  inner=%7d  avgK=%.2f  maxK=%d\n",
+                    st.name.c_str(),dt,sd,c_simd8,s.max_depth,ds.mean_leaf,ds.area_w,ds.prim_w,inner,avg_arity,max_arity);
             if(!first) json<<",";
             first=false;
             json<<"{\"name\":\""<<st.name<<"\""
