@@ -156,9 +156,22 @@ box and `N(n)` is the primitive count of leaf `n`.
 
 This form charges **one** `C_trav` per inner node **regardless of its arity
 `k`**. That is correct only when the SIMD width `W` is at least `k`, so that
-testing `k` child boxes is a single vector operation. It is the standard
-model in the wide-BVH literature (Dammertz et al. 2008; Ernst & Greiner
-2008) — but it is a model **with a precondition**, not a neutral metric.
+testing `k` child boxes is a single vector operation — a model **with a
+precondition**, not a neutral metric.
+
+**Provenance — read before citing.** The base SAH (a `C_trav` term over inner
+nodes plus a `C_isect` term over leaf primitives, each area-weighted) is
+standard and traces to Goldsmith & Salmon 1987 and MacDonald & Booth 1990.
+The **flat** form — one `C_trav` per inner node regardless of arity — is what
+the wide-BVH line uses, justified by the SIMD argument above. **The
+`ceil(k/W)` generalisation is introduced here**, to make that assumption
+explicit and testable; it is not taken from a specific paper and should not
+be cited to one. Those papers more commonly sidestep it by fixing the tree's
+arity to the SIMD width, so that `W >= k` holds by construction and the flat
+form suffices. `ceil(k/W)` is also a crude step function: it does not model
+node memory or cache pressure, stack traffic, or the cost of ordering k
+children by distance.
+
 
 **Consequence: SAH values from trees of different arity are not comparable
 unless `W` is stated.** `sah_cost_simd(nodes, W)` charges `ceil(k/W)` vector
