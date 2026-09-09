@@ -66,6 +66,24 @@ double sah_cost(const std::vector<Node>& nodes){
     return c;
 }
 
+// SAH under an explicit SIMD width W: visiting a k-ary node costs ceil(k/W)
+// vector box tests, so the flat cost above is the special case W >= max arity.
+// Comparing trees of different arity is only meaningful at a stated W.
+double sah_cost_simd(const std::vector<Node>& nodes,int W){
+    float ra=nodes[0].box.half_perim();
+    if(ra<1e-9f) return 0.0;
+    double c=0.0;
+    for(auto& n:nodes){
+        float w=n.box.half_perim()/ra;
+        if(n.is_leaf()) c += C_ISECT*(int)n.prims.size()*w;
+        else {
+            int k=(int)n.children.size();
+            c += C_TRAV*(double)((k+W-1)/W)*w;
+        }
+    }
+    return c;
+}
+
 struct Stats { int nodes,leaves,max_depth,prim_count; };
 Stats tree_stats(const std::vector<Node>& nodes){
     Stats s{0,0,0,0};
@@ -669,6 +687,39 @@ int build_collapse_k2(std::vector<Node>& ns, const Prims& ps, int d) {
     return collapse_k2(tmp, ns, 0, d);
 }
 
+// ─── Pure R-round inline Binned (no Ours bottom) ─────────────────────────────
+// R successive binned rounds per node without recording the intermediate nodes,
+// giving a 2^R-ary node, recursing to MAX_LEAF. R=2 should be topologically
+// identical to Binned Collapse k=2; the pair is the control for the ablation
+// that isolates what the Ours bottom actually contributes.
+int build_binnedN_inline(std::vector<Node>& ns, const Prims& ps, int d, int R) {
+    int n = (int)ps.size();
+    int idx = new_node(ns, ps, d);
+    if (n <= MAX_LEAF) { make_leaf(ns, idx, ps); return idx; }
+    float pa = ns[idx].box.half_perim();
+    Prims lp, rp;
+    if (!binned_split_2way(ps, pa, 16, lp, rp)) { make_leaf(ns, idx, ps); return idx; }
+    std::vector<Prims> groups;
+    groups.push_back(std::move(lp));
+    groups.push_back(std::move(rp));
+    for (int r = 1; r < R; r++) {
+        std::vector<Prims> nxt;
+        for (Prims& sub : groups) {
+            Prims sl, sr;
+            float spa = union_box(sub).half_perim();
+            if ((int)sub.size() > MAX_LEAF && binned_split_2way(sub, spa, 16, sl, sr)) {
+                nxt.push_back(std::move(sl));
+                nxt.push_back(std::move(sr));
+            } else {
+                nxt.push_back(std::move(sub));
+            }
+        }
+        groups.swap(nxt);
+    }
+    for (auto& g : groups) ns[idx].children.push_back(build_binnedN_inline(ns, g, d + 1, R));
+    return idx;
+}
+
 // ─── Binned Collapse k=2 ──────────────────────────────────────────────────────
 // Build a 2-way Binned SAH (B=16) tree, then apply level-skipping collapse:
 // every inner node adopts its grandchildren, removing the intermediate layer.
@@ -760,6 +811,7 @@ int main(int argc, char* argv[]){
         {"2-way SAH Sweep",   [](auto& ns,auto& ps,int d){return build_2way        (ns,ps,d);},     false},
         {"Binned SAH (B=16)",      [](auto& ns,auto& ps,int d){return build_binned         (ns,ps,d,16);}, false},
         {"Binned Collapse k=2",    [](auto& ns,auto& ps,int d){return build_binned_collapse(ns,ps,d);},    false},
+        {"Binned4 inline (pure)",  [](auto& ns,auto& ps,int d){return build_binnedN_inline(ns,ps,d,2);},   false},
         {"Collapse k=2",           [](auto& ns,auto& ps,int d){return build_collapse_k2    (ns,ps,d);},    false},
         {"A Independent",   [](auto& ns,auto& ps,int d){return build_A           (ns,ps,d);}, false},
         {"B Hierarchical",  [](auto& ns,auto& ps,int d){return build_B           (ns,ps,d);}, false},
@@ -862,11 +914,17 @@ int main(int argc, char* argv[]){
             }
             dt/=RUNS;
             double cost=sah_cost(nodes);
+            double c_simd2=sah_cost_simd(nodes,2), c_simd4=sah_cost_simd(nodes,4);
             auto   s   =tree_stats(nodes);
             assert(s.prim_count==tc.N);
+            int max_arity=0;
+            for(auto& n:nodes) if(!n.is_leaf()){
+                int k=(int)n.children.size();
+                if(k>max_arity) max_arity=k;
+            }
 
-            fprintf(stderr,"  [%-22s]  time=%9.4f ms (avg %d runs)  SAH=%9.4f  nodes=%6d  leaves=%6d  maxdepth=%d\n",
-                    st.name.c_str(),dt,RUNS,cost,s.nodes,s.leaves,s.max_depth);
+            fprintf(stderr,"  [%-22s]  time=%9.4f ms  SAH=%9.4f  SIMD2=%8.4f  SIMD4=%8.4f  nodes=%6d  leaves=%6d  maxdepth=%d  maxK=%d\n",
+                    st.name.c_str(),dt,cost,c_simd2,c_simd4,s.nodes,s.leaves,s.max_depth,max_arity);
 
             if(!first_strat) json<<",";
             first_strat=false;

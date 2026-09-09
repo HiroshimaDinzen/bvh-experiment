@@ -59,6 +59,11 @@ struct Node {
 };
 
 // ─── SAH cost (whole tree, uses hsa) ─────────────────────────────────────────
+// NOTE: this variant charges C_TRAV once per inner node, independent of how
+// many children it has. That is only valid when a node's children can all be
+// tested at the same cost as one (e.g. perfect SIMD), and it systematically
+// favours wide trees, which have fewer inner nodes. Use sah_cost_arity() for
+// the arity-aware comparison.
 double sah_cost(const std::vector<Node>& nodes){
     float ra=nodes[0].box.hsa();
     if(ra<1e-9f) return 0.0;
@@ -66,6 +71,42 @@ double sah_cost(const std::vector<Node>& nodes){
     for(auto& n:nodes){
         float w=n.box.hsa()/ra;
         c += n.is_leaf() ? C_ISECT*(int)n.prims.size()*w : C_TRAV*w;
+    }
+    return c;
+}
+
+// Arity-aware SAH: visiting an inner node requires testing every child box,
+// so the traversal term is charged per child (k box tests for a k-ary node).
+// This is the fair comparison between trees of different arity on a scalar
+// traversal machine.
+double sah_cost_arity(const std::vector<Node>& nodes){
+    float ra=nodes[0].box.hsa();
+    if(ra<1e-9f) return 0.0;
+    double c=0.0;
+    for(auto& n:nodes){
+        float w=n.box.hsa()/ra;
+        c += n.is_leaf() ? C_ISECT*(int)n.prims.size()*w
+                         : C_TRAV*(double)n.children.size()*w;
+    }
+    return c;
+}
+
+// SIMD model: a W-wide unit tests W child boxes at once, so a k-ary node
+// costs ceil(k/W) vector operations. W=1 reduces to sah_cost_arity(),
+// W>=max arity reduces to sah_cost(). This is the assumption that actually
+// justifies wide BVHs in the literature, and it must be stated explicitly.
+double sah_cost_simd(const std::vector<Node>& nodes, int W){
+    float ra=nodes[0].box.hsa();
+    if(ra<1e-9f) return 0.0;
+    double c=0.0;
+    for(auto& n:nodes){
+        float w=n.box.hsa()/ra;
+        if(n.is_leaf()) c += C_ISECT*(int)n.prims.size()*w;
+        else {
+            int k=(int)n.children.size();
+            int ops=(k+W-1)/W;
+            c += C_TRAV*(double)ops*w;
+        }
     }
     return c;
 }
@@ -548,6 +589,72 @@ int build_hybrid_binned4_ours8(std::vector<Node>& ns,const Prims& ps,int d){
     return idx;
 }
 
+// BinnedN+Ours8: top does R successive inline binned rounds without recording
+// the intermediate nodes, giving a 2^R-ary node; bottom switches to Ours8 at T.
+// R=2 reproduces build_hybrid_binned4_ours8; R=3 gives the 8-ary top needed to
+// match an 8-wide collapse baseline (same width top and bottom).
+static void inline_binned_more(std::vector<Prims>& groups,int extra_rounds){
+    for(int r=0;r<extra_rounds;r++){
+        std::vector<Prims> nxt;
+        for(Prims& sub:groups){
+            Prims sl,sr;
+            float spa=union_box(sub).hsa();
+            if((int)sub.size()>HYBRID_THRESH&&binned_split_2way(sub,spa,16,sl,sr)){
+                nxt.push_back(std::move(sl));
+                nxt.push_back(std::move(sr));
+            } else {
+                nxt.push_back(std::move(sub));
+            }
+        }
+        groups.swap(nxt);
+    }
+}
+
+int build_hybrid_binnedN_ours8(std::vector<Node>& ns,const Prims& ps,int d,int R){
+    if((int)ps.size()<=HYBRID_THRESH) return build_ours8(ns,ps,d);
+    int idx=new_node(ns,ps,d);
+    float pa=ns[idx].box.hsa();
+    Prims lp,rp;
+    if(!binned_split_2way(ps,pa,16,lp,rp)){make_leaf(ns,idx,ps);return idx;}
+    std::vector<Prims> groups;
+    groups.push_back(std::move(lp));
+    groups.push_back(std::move(rp));
+    inline_binned_more(groups,R-1);
+    for(auto& g:groups) ns[idx].children.push_back(build_hybrid_binnedN_ours8(ns,g,d+1,R));
+    return idx;
+}
+
+// Pure R-round inline binned, no Ours bottom: recurses to MAX_LEAF. Used to
+// check that an R-round inline top is topologically the same as collapsing a
+// binary binned tree by R-1 levels, which makes the hybrid a clean ablation.
+int build_binnedN_inline(std::vector<Node>& ns,const Prims& ps,int d,int R){
+    int n=(int)ps.size();
+    int idx=new_node(ns,ps,d);
+    if(n<=MAX_LEAF){make_leaf(ns,idx,ps);return idx;}
+    float pa=ns[idx].box.hsa();
+    Prims lp,rp;
+    if(!binned_split_2way(ps,pa,16,lp,rp)){make_leaf(ns,idx,ps);return idx;}
+    std::vector<Prims> groups;
+    groups.push_back(std::move(lp));
+    groups.push_back(std::move(rp));
+    for(int r=1;r<R;r++){
+        std::vector<Prims> nxt;
+        for(Prims& sub:groups){
+            Prims sl,sr;
+            float spa=union_box(sub).hsa();
+            if((int)sub.size()>MAX_LEAF&&binned_split_2way(sub,spa,16,sl,sr)){
+                nxt.push_back(std::move(sl));
+                nxt.push_back(std::move(sr));
+            } else {
+                nxt.push_back(std::move(sub));
+            }
+        }
+        groups.swap(nxt);
+    }
+    for(auto& g:groups) ns[idx].children.push_back(build_binnedN_inline(ns,g,d+1,R));
+    return idx;
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 // Collapse k=2
 // ════════════════════════════════════════════════════════════════════════════
@@ -576,6 +683,32 @@ int build_binned_collapse(std::vector<Node>& ns,const Prims& ps,int d){
     std::vector<Node> tmp; tmp.reserve(ps.size()*4);
     build_binned(tmp,ps,0,16);
     return collapse_k2(tmp,ns,0,d);
+}
+
+// Generalised collapse: skip `lvl` levels below each child, giving a
+// 2^(lvl+1)-ary tree. lvl=1 reproduces collapse_k2 (4-ary); lvl=2 gives the
+// 8-ary wide tree used as the width-matched baseline for Ours8.
+static void gather_desc(const std::vector<Node>& old_ns,int oi,int lvl,std::vector<int>& out){
+    if(lvl==0||old_ns[oi].is_leaf()){out.push_back(oi);return;}
+    for(int ci:old_ns[oi].children) gather_desc(old_ns,ci,lvl-1,out);
+}
+
+int collapse_n(const std::vector<Node>& old_ns,std::vector<Node>& new_ns,int oi,int d,int lvl){
+    int ni=(int)new_ns.size();
+    new_ns.push_back(Node());
+    new_ns[ni].box=old_ns[oi].box;
+    new_ns[ni].depth=d;
+    if(old_ns[oi].is_leaf()){new_ns[ni].prims=old_ns[oi].prims;return ni;}
+    std::vector<int> gc;
+    for(int ci:old_ns[oi].children) gather_desc(old_ns,ci,lvl,gc);
+    for(int gci:gc){int nc=collapse_n(old_ns,new_ns,gci,d+1,lvl);new_ns[ni].children.push_back(nc);}
+    return ni;
+}
+
+int build_binned_collapse8(std::vector<Node>& ns,const Prims& ps,int d){
+    std::vector<Node> tmp; tmp.reserve(ps.size()*4);
+    build_binned(tmp,ps,0,16);
+    return collapse_n(tmp,ns,0,d,2);
 }
 
 // ─── OBJ loader ───────────────────────────────────────────────────────────────
@@ -682,6 +815,7 @@ int main(int argc, char* argv[]){
         {"Binned SAH (B=16)",   [](auto& ns,auto& ps,int d){return build_binned          (ns,ps,d,16);}},
         {"Collapse k=2",        [](auto& ns,auto& ps,int d){return build_collapse_k2     (ns,ps,d);}},
         {"Binned Collapse k=2", [](auto& ns,auto& ps,int d){return build_binned_collapse (ns,ps,d);}},
+        {"Binned Collapse 8ary",[](auto& ns,auto& ps,int d){return build_binned_collapse8(ns,ps,d);}},
         {"A4 Independent",      [](auto& ns,auto& ps,int d){return build_A4              (ns,ps,d);}},
         {"A8 Independent",      [](auto& ns,auto& ps,int d){return build_A8              (ns,ps,d);}},
         {"B4 Hierarchical",     [](auto& ns,auto& ps,int d){return build_B4              (ns,ps,d);}},
@@ -695,6 +829,9 @@ int main(int argc, char* argv[]){
         {"Binned4+A8 (T=32)",   [](auto& ns,auto& ps,int d){return build_hybrid_binned4_A8(ns,ps,d);}},
         {"Binned4+Ours4 (T=32)",[](auto& ns,auto& ps,int d){return build_hybrid_binned4_ours4(ns,ps,d);}},
         {"Binned4+Ours8 (T=32)",[](auto& ns,auto& ps,int d){return build_hybrid_binned4_ours8(ns,ps,d);}},
+        {"Binned4 inline (pure)",[](auto& ns,auto& ps,int d){return build_binnedN_inline(ns,ps,d,2);}},
+        {"Binned8 inline (pure)",[](auto& ns,auto& ps,int d){return build_binnedN_inline(ns,ps,d,3);}},
+        {"Binned8+Ours8 (T=32)",[](auto& ns,auto& ps,int d){return build_hybrid_binnedN_ours8(ns,ps,d,3);}},
     };
     // reflect the actual threshold in the printed strategy names
     for(auto& st:strats){
@@ -737,10 +874,19 @@ int main(int argc, char* argv[]){
             double sd  = RUNS>1 ? std::sqrt(var/(RUNS-1)) : 0.0;   // sample SD
             double tmin= *std::min_element(samples.begin(),samples.end());
             double cost=sah_cost(nodes);
+            double cost_ar=sah_cost_arity(nodes);
             auto s=tree_stats(nodes);
             assert(s.prim_count==N);
-            fprintf(stderr,"  [%-22s]  time=%9.2f ms  sd=%7.2f  min=%9.2f  SAH=%9.4f  nodes=%7d  leaves=%7d  maxdepth=%d\n",
-                    st.name.c_str(),dt,sd,tmin,cost,s.nodes,s.leaves,s.max_depth);
+            double avg_arity=0.0; int inner=0, max_arity=0;
+            for(auto& n:nodes) if(!n.is_leaf()){
+                int k=(int)n.children.size();
+                avg_arity+=(double)k; inner++;
+                if(k>max_arity) max_arity=k;
+            }
+            if(inner) avg_arity/=inner;
+            double c_simd4=sah_cost_simd(nodes,4), c_simd8=sah_cost_simd(nodes,8);
+            fprintf(stderr,"  [%-22s] t=%8.1f+-%6.1f  SIMD4=%8.3f  SIMD8=%8.3f  inner=%7d  avgK=%.2f  maxK=%d\n",
+                    st.name.c_str(),dt,sd,c_simd4,c_simd8,inner,avg_arity,max_arity);
             if(!first) json<<",";
             first=false;
             json<<"{\"name\":\""<<st.name<<"\""
