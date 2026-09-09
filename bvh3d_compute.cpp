@@ -118,21 +118,24 @@ double sah_cost_simd(const std::vector<Node>& nodes, int W){
 // chance a random ray reaches that leaf - closer to what traversal feels than
 // an unweighted mean. Note SAH already accounts for depth implicitly, so these
 // explain tree shape; they do not override the SAH comparison.
-struct DepthStats { double mean_leaf, area_w, prim_w; };
+struct DepthStats { double mean_leaf, area_w, prim_w; int hist[5]; };
 DepthStats depth_stats(const std::vector<Node>& nodes){
     float ra=nodes[0].box.hsa();
     double sd=0.0, sw=0.0, wsum=0.0, sp=0.0, psum=0.0;
-    int nl=0;
+    int nl=0, h[5]={0,0,0,0,0};
     for(auto& n:nodes){
         if(!n.is_leaf()) continue;
         double d=(double)n.depth;
         sd+=d; nl++;
         double w = ra>1e-9f ? (double)(n.box.hsa()/ra) : 0.0;
         sw+=d*w; wsum+=w;
-        double p=(double)n.prims.size();
-        sp+=d*p; psum+=p;
+        int np=(int)n.prims.size();
+        sp+=d*(double)np; psum+=(double)np;
+        h[np<1?1:(np>4?4:np)]++;      // leaf occupancy, clamped to [1, MAX_LEAF]
     }
-    return { nl?sd/nl:0.0, wsum>0?sw/wsum:0.0, psum>0?sp/psum:0.0 };
+    DepthStats r{ nl?sd/nl:0.0, wsum>0?sw/wsum:0.0, psum>0?sp/psum:0.0, {0,0,0,0,0} };
+    for(int i=0;i<5;i++) r.hist[i]=h[i];
+    return r;
 }
 
 struct Stats { int nodes,leaves,max_depth,prim_count; };
@@ -910,8 +913,12 @@ int main(int argc, char* argv[]){
             if(inner) avg_arity/=inner;
             double c_simd4=sah_cost_simd(nodes,4), c_simd8=sah_cost_simd(nodes,8);
             DepthStats ds=depth_stats(nodes);
-            fprintf(stderr,"  [%-22s] t=%8.1f+-%6.1f  SIMD8=%8.3f  maxD=%3d  meanD=%5.2f  areaD=%5.2f  primD=%5.2f  inner=%7d  avgK=%.2f  maxK=%d\n",
-                    st.name.c_str(),dt,sd,c_simd8,s.max_depth,ds.mean_leaf,ds.area_w,ds.prim_w,inner,avg_arity,max_arity);
+            int tl=ds.hist[1]+ds.hist[2]+ds.hist[3]+ds.hist[4]; if(!tl) tl=1;
+            fprintf(stderr,"  [%-22s] SIMD8=%8.3f  meanD=%5.2f  inner=%7d  leaves=%7d  p/leaf=%.2f  leaf1=%4.1f%% leaf2=%4.1f%% leaf3=%4.1f%% leaf4=%4.1f%%  avgK=%.2f\n",
+                    st.name.c_str(),c_simd8,ds.mean_leaf,inner,s.leaves,
+                    (double)N/(double)(s.leaves?s.leaves:1),
+                    100.0*ds.hist[1]/tl,100.0*ds.hist[2]/tl,100.0*ds.hist[3]/tl,100.0*ds.hist[4]/tl,
+                    avg_arity);
             if(!first) json<<",";
             first=false;
             json<<"{\"name\":\""<<st.name<<"\""
