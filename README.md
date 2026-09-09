@@ -29,6 +29,39 @@ Build-time evidence, stated by strength:
 SAH figures are deterministic and reproduced bit-for-bit across runs; only
 the timing carries this uncertainty.
 
+### Scope: the proposal only pays off at the bottom of a hybrid
+
+`Ours4` / `Ours8` are **not** competitive as standalone builders, and this is
+not a tuning problem — it is structural.
+
+Per node, `Ours` does the same work as an exact sweep: three sorts and
+`3(n−1)` candidate evaluations. Binned SAH does `O(n + B)` with 45
+evaluations and **no sort at all**. So `Ours` reduces the *number* of split
+levels (Dragon: max depth 25 → 15 for `Ours4`) while raising the cost of
+*each* level by more than the depth saving returns:
+
+| Method | Per-node work | Evaluations | Max depth | Build [ms] |
+|---|---|---|---|---|
+| 2-way Sweep | 3 sorts, `O(n log n)` | `3(n−1)` | 24 | 2115 |
+| Binned (B=16) | binning, `O(n+B)`, no sort | 45 | 25 | **682** |
+| Ours4 | 3 sorts, `O(n log n)` | `3(n−1)` | **15** | 1370 |
+| Ours8 | 3 sorts, `O(n log n)` | `3(n−1)` | **11** | 1029 |
+
+`Ours4` cuts depth by 40 % and is still **2× slower than binned**. Counting
+split rounds without pricing each round is exactly the kind of cost
+evaluation this repository got wrong before.
+
+The depth argument holds only where the sort is cheap — at the bottom of a
+hybrid, where `n ≤ T = 32`. That is where the measured gain comes from:
+`Binned8 inline` (binned all the way down) 722.7 ms → `Binned8+Ours8` (Ours
+below T) **630.1 ms**, a 13 % saving. Applied to a whole tree the same
+argument fails.
+
+**So the claim is scoped to: `Ours` as the bottom stage of a hybrid whose top
+is an inline-widened binned build of matching arity.** Nothing broader is
+claimed, and the standalone numbers above should not be read as a fallback
+position.
+
 ### The retraction
 
 An earlier version of this work claimed a **"40–60 % SAH reduction."**
