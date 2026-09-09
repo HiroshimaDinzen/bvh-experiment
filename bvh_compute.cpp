@@ -905,14 +905,18 @@ int main(int argc, char* argv[]){
                 nodes.clear(); nodes.reserve(tc.N*4);
                 st.fn(nodes,base,0);
             }
+            std::vector<double> samples; samples.reserve(RUNS);
             for(int run=0;run<RUNS;run++){
                 nodes.clear(); nodes.reserve(tc.N*4);
                 auto t0=std::chrono::high_resolution_clock::now();
                 st.fn(nodes,base,0);
                 auto t1=std::chrono::high_resolution_clock::now();
-                dt+=std::chrono::duration<double,std::milli>(t1-t0).count();
+                samples.push_back(std::chrono::duration<double,std::milli>(t1-t0).count());
             }
+            for(double v:samples) dt+=v;
             dt/=RUNS;
+            double var=0.0; for(double v:samples) var+=(v-dt)*(v-dt);
+            double sd = RUNS>1 ? std::sqrt(var/(RUNS-1)) : 0.0;   // sample SD
             double cost=sah_cost(nodes);
             double c_simd2=sah_cost_simd(nodes,2), c_simd4=sah_cost_simd(nodes,4);
             auto   s   =tree_stats(nodes);
@@ -923,8 +927,8 @@ int main(int argc, char* argv[]){
                 if(k>max_arity) max_arity=k;
             }
 
-            fprintf(stderr,"  [%-22s]  time=%9.4f ms  SAH=%9.4f  SIMD2=%8.4f  SIMD4=%8.4f  nodes=%6d  leaves=%6d  maxdepth=%d  maxK=%d\n",
-                    st.name.c_str(),dt,cost,c_simd2,c_simd4,s.nodes,s.leaves,s.max_depth,max_arity);
+            fprintf(stderr,"  [%-22s]  time=%9.4f+-%7.4f ms  SAH=%9.4f  SIMD2=%8.4f  SIMD4=%8.4f  nodes=%6d  leaves=%6d  maxdepth=%d  maxK=%d\n",
+                    st.name.c_str(),dt,sd,cost,c_simd2,c_simd4,s.nodes,s.leaves,s.max_depth,max_arity);
 
             if(!first_strat) json<<",";
             first_strat=false;
