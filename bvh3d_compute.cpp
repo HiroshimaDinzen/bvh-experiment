@@ -516,6 +516,67 @@ int build_ours_adaptive(std::vector<Node>& ns,const Prims& ps,int d){
     return idx;
 }
 
+// ─── Ours-percell: per-cell go/no-go instead of per-level all-or-nothing ─────
+// build_ours_adaptive applies each axis to every cell or to none, so the
+// partition stays a strict grid. Here each cell decides for itself whether the
+// axis is worth applying, using the marginal cost of adding one more child:
+//   d = C_trav*[ceil((k+1)/W) - ceil(k/W)] + C_isect*[(A_lo N_lo + A_hi N_hi)
+//                                                      - A_c N_c] / A(P)
+// The second term is always <= 0 (refinement never increases sum A*N), the
+// first is 0 except when k crosses a multiple of W. Thresholds stay global, so
+// no axis is ever re-swept: this sits between a pure grid and a fully adaptive
+// subdivision. Arity can be any value in 2..8, not just a power of two.
+//
+// At BUILD_W >= 8 every k <= 8 gives ceil(k/W)=1, so d < 0 always and this
+// reproduces the full grid - the same null result as Ours-adaptive.
+//
+// Greedy and order-dependent: cells processed earlier get the splits that fall
+// below a W boundary, later ones pay for crossing it.
+int build_ours_percell(std::vector<Node>& ns,const Prims& ps,int d){
+    int idx=new_node(ns,ps,d); int n=(int)ps.size();
+    if(n<=MAX_LEAF){make_leaf(ns,idx,ps);return idx;}
+    float pa=ns[idx].box.hsa();
+    float inv=pa>1e-9f?1.f/pa:0.f;
+
+    Split sr[3]; float costs[3]={1e30f,1e30f,1e30f};
+    for(int ax=0;ax<3;ax++){ sr[ax]=best_1d(ps,ax); if(sr[ax].s>=0) costs[ax]=sr[ax].cost; }
+    int ord[3]={0,1,2};
+    std::sort(ord,ord+3,[&](int a,int b){return costs[a]<costs[b];});
+    if(sr[ord[0]].s<0){make_leaf(ns,idx,ps);return idx;}
+
+    std::vector<Prims> cells; cells.push_back(ps);
+    std::vector<float> cellAN; cellAN.push_back(union_box(ps).hsa()*(float)n);
+
+    for(int i=0;i<3;i++){
+        int ax=ord[i];
+        if(sr[ax].s<0) continue;
+        float t=split_thresh(sr[ax],ax);
+        std::vector<Prims> nxt; std::vector<float> nxtAN;
+        for(size_t ci=0; ci<cells.size(); ci++){
+            Prims lo,hi;
+            for(auto& p:cells[ci]) (p.box.centroid(ax)>=t?hi:lo).push_back(p);
+            if(lo.empty()||hi.empty()){
+                nxtAN.push_back(cellAN[ci]); nxt.push_back(std::move(cells[ci])); continue;
+            }
+            float anl=union_box(lo).hsa()*(float)lo.size();
+            float anh=union_box(hi).hsa()*(float)hi.size();
+            int k_now=(int)nxt.size()+(int)(cells.size()-ci);      // children if we stop here
+            int dtrav=((k_now+1+BUILD_W-1)/BUILD_W)-((k_now+BUILD_W-1)/BUILD_W);
+            float delta=C_TRAV*(float)dtrav + C_ISECT*inv*((anl+anh)-cellAN[ci]);
+            if(delta<0.f){
+                nxtAN.push_back(anl); nxt.push_back(std::move(lo));
+                nxtAN.push_back(anh); nxt.push_back(std::move(hi));
+            } else {
+                nxtAN.push_back(cellAN[ci]); nxt.push_back(std::move(cells[ci]));
+            }
+        }
+        cells.swap(nxt); cellAN.swap(nxtAN);
+    }
+    if(cells.size()<=1){make_leaf(ns,idx,ps);return idx;}
+    for(auto& g:cells) ns[idx].children.push_back(build_ours_percell(ns,g,d+1));
+    return idx;
+}
+
 // ─── Hybrid helpers (3-axis version) ─────────────────────────────────────────
 static bool binned_split_2way(const Prims& ps, float pa, int n_bins, Prims& lp, Prims& rp){
     int n=(int)ps.size();
@@ -693,6 +754,20 @@ static void inline_binned_more(std::vector<Prims>& groups,int extra_rounds){
         }
         groups.swap(nxt);
     }
+}
+
+int build_hybrid_binnedN_ourspc(std::vector<Node>& ns,const Prims& ps,int d,int R){
+    if((int)ps.size()<=HYBRID_THRESH) return build_ours_percell(ns,ps,d);
+    int idx=new_node(ns,ps,d);
+    float pa=ns[idx].box.hsa();
+    Prims lp,rp;
+    if(!binned_split_2way(ps,pa,16,lp,rp)){make_leaf(ns,idx,ps);return idx;}
+    std::vector<Prims> groups;
+    groups.push_back(std::move(lp));
+    groups.push_back(std::move(rp));
+    inline_binned_more(groups,R-1);
+    for(auto& g:groups) ns[idx].children.push_back(build_hybrid_binnedN_ourspc(ns,g,d+1,R));
+    return idx;
 }
 
 int build_hybrid_binnedN_oursad(std::vector<Node>& ns,const Prims& ps,int d,int R){
@@ -936,6 +1011,8 @@ int main(int argc, char* argv[]){
         {"Binned8+Ours8 (T=32)",[](auto& ns,auto& ps,int d){return build_hybrid_binnedN_ours8(ns,ps,d,3);}},
         {"Ours-adapt (bw)",     [](auto& ns,auto& ps,int d){return build_ours_adaptive(ns,ps,d);}},
         {"Binned8+OursAd (T=32)",[](auto& ns,auto& ps,int d){return build_hybrid_binnedN_oursad(ns,ps,d,3);}},
+        {"Ours-percell (bw)",   [](auto& ns,auto& ps,int d){return build_ours_percell(ns,ps,d);}},
+        {"Binned8+OursPC (T=32)",[](auto& ns,auto& ps,int d){return build_hybrid_binnedN_ourspc(ns,ps,d,3);}},
     };
     // reflect the actual threshold in the printed strategy names
     for(auto& st:strats){
