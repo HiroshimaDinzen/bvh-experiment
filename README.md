@@ -233,6 +233,39 @@ This matters for the experiment design: it makes `Binned8+Ours8` versus
 only in the bottom. It also isolates where the build-time saving comes from:
 the intermediate binary tree is never materialised.
 
+### Verified: at `W >= 8` the exact split decision changes nothing
+
+`build_ours4` / `build_ours8` choose per-axis thresholds by *binary* SAH and
+then commit to a 4- or 8-way node whose own cost is never evaluated — the
+criterion does not match the structure built. Two corrected builders price
+each widening step with the same term the finished tree is scored by,
+
+```
+C_trav * ceil(k/W) + (C_isect / A(P)) * sum_i A(C_i) * N(C_i)
+```
+
+and pick the cheapest of {leaf, 2-way, 4-way, 8-way}.
+
+**At `BUILD_W >= 8` both reproduce `Ours8` bit-for-bit** — SAH, inner count,
+leaf count, max depth and the entire leaf-occupancy histogram identical, on
+both meshes. `ceil(k/W) = 1` for every `k <= 8`, so the traversal terms
+cancel between the 2-, 4- and 8-way candidates, and `sum A*N` is monotone
+non-increasing under refinement, so the widest candidate always wins.
+
+**So the original fixed 8-way split was already cost-optimal under the stated
+assumption.** The defect was not the choice; it was leaving `W >= 8`
+unstated. That is a different and smaller fault than "the split decision is
+wrong", and it is checkable rather than a matter of opinion.
+
+Below that width the decision does bind. At `BUILD_W = 1`, single-primitive
+leaves fall from 36.0% to 8.5%, node-count overhead against
+`Binned Collapse 8ary` from +46.6% to +16.0%, and SAH improves 2.0%. It costs
+28% build time (851.6 ms against 665.2) — **the one advantage that was still
+standing, so correcting this criticism erases the benefit.** With arity also
+matched (avgK 3.04 against 3.03) the grid is still 18% behind: that residual
+is the cost of deriving every cell boundary from three global thresholds
+instead of seven per-subgroup ones, and no decision rule removes it.
+
 ---
 
 ## Results at matched arity
@@ -356,10 +389,12 @@ bvh_compute.exe --T=32
 2. **Explain the 2D/3D discrepancy** in SAH direction. Note the 3D side of
    that comparison was measured at `MAX_LEAF = 4`; re-check it at the swept
    optimum before treating the discrepancy as real.
-3. **Make the split decision match the structure built.** Thresholds are
-   currently chosen by per-axis *binary* SAH, but a 4-way or 8-way node is
-   then built; the cost of that wide split is never evaluated against the
-   binary alternative. The criterion and the constructed structure do not
-   correspond.
+3. ~~**Make the split decision match the structure built.**~~ **Done** — see
+   "Verified: at `W >= 8` the exact split decision changes nothing". Both
+   corrected rules are registered (`Ours-adapt`, `Ours-percell`); at `W >= 8`
+   they reproduce the original exactly, and below it they improve the tree
+   but cost 28 % build time. What remains is the 18 % residual at matched
+   arity, which is inherent to three global thresholds rather than a
+   decision-rule defect.
 4. **Account for the larger finished tree** (26–47 % more nodes) in any
    memory argument.
