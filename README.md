@@ -6,6 +6,38 @@ construction instead of building a binary tree and collapsing it afterwards.
 
 ---
 
+## The two criticisms, and where each is answered
+
+This work was reviewed and two faults were identified. **Both are confirmed.**
+Each is answered in a named section below; this table is only the index.
+
+**1 — the split decision.** Thresholds were chosen by per-axis *binary* SAH
+while a 4- or 8-way node was built, and that node's own cost was never
+evaluated, so the criterion did not match the structure. Two corrected rules
+are implemented and measured.
+→ *Verified: at `W >= 8` the exact split decision changes nothing.*
+**Outcome:** at the stated width the original was already cost-optimal — the
+fault was leaving `W >= 8` unstated, not the choice. Below that width the fix
+improves the tree but costs 28 % build time, which is the only advantage that
+was still standing.
+
+**2 — the cost evaluation.** The SAH charged one `C_trav` per inner node
+regardless of arity, the `W >= k` precondition was never stated, and an 8-ary
+proposal was compared against a 4-ary baseline — so the gain from *widening
+the tree* was never separated out from the method's own contribution.
+→ *The retraction* · *Assumptions §1, SIMD width* · *Assumptions §4, arity
+must be matched* · *Parameter sweeps.*
+**Outcome:** the "40–60 % SAH reduction" claim is **withdrawn**. At matched
+arity and each builder at its own optimum, collapse wins on SAH in every
+configuration tested; only a build-time advantage survives.
+
+A third fault of the same class is recorded under *Scope: the proposal only
+pays off at the bottom of a hybrid* — the `log₂T → log₄T` argument counted
+split rounds without pricing each round. `Ours` performs three sorts per
+node; binned performs none.
+
+---
+
 ## Read this first: what is and is not claimed
 
 ### The claim
